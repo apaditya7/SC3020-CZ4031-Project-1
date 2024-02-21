@@ -5,6 +5,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <cmath>
 
 #define N 24
 #define DISK_SIZE 200 * 1024 * 1024
