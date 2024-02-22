@@ -322,327 +322,6 @@ void Experiment2(Disk* disk) {
     cout << endl;
 }
 
-
-
-bool rootKeyNeedsUpdate(IndexBlock* root, uint32_t key) {
-    // cout << "Root key " << key << endl;
-    // cout << "Root value" << root->keys[0] << endl;
-
-    for (int i = 0; i < root->numKeys; i++) {
-        if (root->keys[i] == key) {
-            return true;
-        }
-    }
-    return false;
-}
-
-int getIndexOfKeyInRoot(IndexBlock* root, uint32_t key) {
-    for (int i = 0; i < root->numKeys; i++) {
-        if (root->keys[i] == key) {
-            return i;
-        }
-    }
-    return -1; // Key not found
-}
-
-void replaceKeyInRoot(IndexBlock* root, uint32_t oldKey, uint32_t newKey) {
-    for (int i = 0; i < root->numKeys; i++) {
-        if (root->keys[i] == oldKey) {
-            root->keys[i] = newKey;
-            return;
-        }
-    }
-}
-
-void Delete(IndexBlock** root, uint32_t key) {
-    IndexBlock* block = *root;
-    stack<IndexBlock*> stack;
-    while (block->nodeType != LEAF) {
-        int i;
-        for(i = 0; i < block->numKeys; i++) {
-            if (key < block->keys[i]) break;
-        }
-        stack.push(block);
-        block = block->pointers[i];
-    }
-    
-
-    bool keyFound = false;
-    int keyIndex;
-    for(keyIndex = 0; keyIndex < block->numKeys; keyIndex++) {
-        if (block->keys[keyIndex] == key) {
-            keyFound = true;
-            break;
-        }
-    }
-     
-
-    if (!keyFound) {
-        cout << "Key " << key << " not found in the tree." << endl;
-        return;
-    }
-
-    // cout << "Reached c " << key << endl;
-
-    for(int i = keyIndex; i < block->numKeys - 1; i++) {
-        block->keys[i] = block->keys[i + 1];
-        block->pointers[i] = block->pointers[i + 1];
-    }
-    block->numKeys--;
-
-    // cout << "Reached d " << key << endl;
-
-    if (block->numKeys < ceil(N / 2.0f)) {
-    IndexBlock* parent = nullptr;
-    IndexBlock* leftSibling = nullptr;
-    IndexBlock* rightSibling = nullptr;
-    int indexOfBlockInParent = -1;
-    // cout << "Reached d " << key << endl;
-
-
-    if (!stack.empty()) {
-        parent = stack.top();
-        // stack.pop();
-        // cout << "Parent 1: " << parent->keys[0] << endl;
-        
-
-        
-        for (int i = 0; i <= parent->numKeys; i++) {
-            if (parent->pointers[i] == block) {
-                indexOfBlockInParent = i;
-                break;
-            }
-        }
-
-        
-        if (indexOfBlockInParent > 0) {
-            leftSibling = parent->pointers[indexOfBlockInParent - 1];
-            // cout << "Left Sibling: " << leftSibling->keys[0] << endl;
-
-        }
-        if (indexOfBlockInParent < parent->numKeys) {
-            rightSibling = parent->pointers[indexOfBlockInParent + 1];
-            // cout << "Right Sibling: " << rightSibling->keys[0] << endl;
-        }
-
-        if (leftSibling != nullptr && leftSibling->numKeys > ceil(N / 2.0f)) {
-        
-        for(int i = block->numKeys; i > 0; i--) {
-            block->keys[i] = block->keys[i - 1];
-            block->pointers[i+1] = block->pointers[i];
-        }
-        // cout << "c 1: "  << endl;
-        block->pointers[1] = block->pointers[0];
-        // cout << "c 2: " << endl;
-
-        block->keys[0] = leftSibling->keys[leftSibling->numKeys - 1];
-
-        parent->keys[indexOfBlockInParent - 1] = leftSibling->keys[leftSibling->numKeys - 1];
-
-        block->pointers[0] = leftSibling->pointers[leftSibling->numKeys-1];
-
-        leftSibling->numKeys--;
-
-        block->numKeys++;
-        
-        } 
-        else if (rightSibling != nullptr && rightSibling->numKeys > ceil(N / 2.0f)) {
-        block->keys[block->numKeys] = parent->keys[indexOfBlockInParent];
-
-        block->pointers[block->numKeys] = rightSibling->pointers[0];
-        // cout << "Value:" << block->keys[block->numKeys]  << endl;
-        // cout << "Value:" << parent->keys[indexOfBlockInParent]  << endl;
-        
-
-        for (int i = 0; i < rightSibling->numKeys - 1; i++) {
-            rightSibling->keys[i] = rightSibling->keys[i + 1];
-            rightSibling->pointers[i] = rightSibling->pointers[i + 1];
-        }
-        rightSibling->pointers[rightSibling->numKeys - 1] = rightSibling->pointers[rightSibling->numKeys];
-
-        parent->keys[indexOfBlockInParent] = rightSibling->keys[0];
-
-        block->numKeys++;
-        rightSibling->numKeys--;
-    }
-
-    else {
-    IndexBlock* sibling = (leftSibling != nullptr) ? leftSibling : rightSibling;
-    int siblingIndex = (leftSibling != nullptr) ? indexOfBlockInParent - 1 : indexOfBlockInParent;
-    
-    IndexBlock* mergeInto = (leftSibling != nullptr) ? leftSibling : block;
-    IndexBlock* mergeFrom = (leftSibling != nullptr) ? block : rightSibling;
-
-    for (int i = 0; i < mergeFrom->numKeys; i++) {
-        mergeInto->keys[mergeInto->numKeys] = mergeFrom->keys[i];
-        mergeInto->pointers[mergeInto->numKeys] = mergeFrom->pointers[i];
-        mergeInto->numKeys++;
-    }
-
-    for (int i = siblingIndex + 1; i < parent->numKeys; i++) {
-        parent->keys[i - 1] = parent->keys[i];
-        parent->pointers[i] = parent->pointers[i + 1];
-    }
-    parent->numKeys--;
-
-    if (mergeFrom != mergeInto) {
-        free(mergeFrom);
-    }
-
-    
-
-
-    }
-    // cout << "Reached 3 " << key << endl;
-
-
-    while (!stack.empty()) {
-    IndexBlock* parentNode = stack.top();
-    // cout << "Parent: " << parentNode->keys[0] << endl;
-    // cout << "Num: " << unsigned(parentNode->numKeys) << endl;
-
-    stack.pop();
-
-    if (parentNode->numKeys < floor(N / 2.0f)) {
-        cout << "Underflow: " << parentNode->keys[0] << endl;
-        IndexBlock* grandParent = !stack.empty() ? stack.top() : nullptr;
-        IndexBlock* leftParentSibling = nullptr;
-        IndexBlock* rightParentSibling = nullptr;
-        int indexOfParentInGrandparent = -1;
-
-
-        if (grandParent != nullptr) {
-            for (int i = 0; i <= grandParent->numKeys; ++i) {
-                if (grandParent->pointers[i] == parentNode) {
-                    indexOfParentInGrandparent = i;
-                    // cout << "indexofp: " << indexOfParentInGrandparent << endl;
-
-                    if (i > 0) leftParentSibling = grandParent->pointers[i - 1];
-                    if (i < grandParent->numKeys) rightParentSibling = grandParent->pointers[i + 1];
-                    // cout << "indexofp: " << rightParentSibling->keys[0] << endl;
-                    break;
-                }
-            }
-        }
-
-        if (leftParentSibling != nullptr && leftParentSibling->numKeys > ceil(N / 2.0f)) {
-        cout << "LEFTpARENT: " << parentNode->keys[0] << endl;
-        parentNode->pointers[parentNode->numKeys + 1] = parentNode->pointers[parentNode->numKeys]; // Shift the pointer
-        for (int i = parentNode->numKeys; i > 0; i--) {
-            parentNode->keys[i] = parentNode->keys[i - 1];
-            parentNode->pointers[i] = parentNode->pointers[i - 1];
-        }
-        parentNode->keys[0] = grandParent->keys[indexOfParentInGrandparent - 1];
-        grandParent->keys[indexOfParentInGrandparent - 1] = leftParentSibling->keys[leftParentSibling->numKeys - 1];
-        parentNode->pointers[0] = leftParentSibling->pointers[leftParentSibling->numKeys];
-        parentNode->numKeys++;
-        leftParentSibling->numKeys--;
-        } 
-        else if (rightParentSibling != nullptr && rightParentSibling->numKeys > ceil(N / 2.0f)) {
-        cout << "RIGHT Parent: " << rightParentSibling->keys[0] << endl;
-        parentNode->keys[parentNode->numKeys] = grandParent->keys[indexOfParentInGrandparent];
-        parentNode->pointers[parentNode->numKeys + 1] = rightParentSibling->pointers[0];
-        grandParent->keys[indexOfParentInGrandparent] = rightParentSibling->keys[0];
-        for (int i = 0; i < rightParentSibling->numKeys - 1; i++) {
-            rightParentSibling->keys[i] = rightParentSibling->keys[i + 1];
-            rightParentSibling->pointers[i] = rightParentSibling->pointers[i + 1];
-        }
-        rightParentSibling->pointers[rightParentSibling->numKeys - 1] = rightParentSibling->pointers[rightParentSibling->numKeys];
-        parentNode->numKeys++;
-        rightParentSibling->numKeys--;
-        }
-
-        else{
-        cout << "Merging " << endl;
-
-        if (leftParentSibling != nullptr && leftParentSibling->numKeys <= ceil(N / 2.0f)) {
-            cout << "Merging L " << endl;
-            leftParentSibling->keys[leftParentSibling->numKeys] = grandParent->keys[indexOfParentInGrandparent - 1];
-            for (int i = 0; i < parentNode->numKeys; ++i) {
-                leftParentSibling->keys[leftParentSibling->numKeys + 1 + i] = parentNode->keys[i];
-                leftParentSibling->pointers[leftParentSibling->numKeys + 1 + i] = parentNode->pointers[i];
-            }
-            leftParentSibling->pointers[leftParentSibling->numKeys + 1 + parentNode->numKeys] = parentNode->pointers[parentNode->numKeys];
-            leftParentSibling->numKeys += (1 + parentNode->numKeys);
-
-            for (int i = indexOfParentInGrandparent; i < grandParent->numKeys - 1; ++i) {
-                grandParent->keys[i] = grandParent->keys[i + 1];
-                grandParent->pointers[i + 1] = grandParent->pointers[i + 2];
-            }
-            grandParent->numKeys--;
-        } 
-        else if (rightParentSibling != nullptr && rightParentSibling->numKeys <= ceil(N / 2.0f)) {
-          
-            parentNode->keys[parentNode->numKeys] = grandParent->keys[indexOfParentInGrandparent];
-
-            for (int i = 0; i < rightParentSibling->numKeys; ++i) {
-                cout << "Merging R" << rightParentSibling->keys[i] << endl;
-                parentNode->keys[parentNode->numKeys + 1 + i] = rightParentSibling->keys[i];
-                parentNode->pointers[parentNode->numKeys + 1 + i] = rightParentSibling->pointers[i];
-            }
-            parentNode->pointers[parentNode->numKeys + rightParentSibling->numKeys + 1] = rightParentSibling->pointers[rightParentSibling->numKeys];
-
-            parentNode->numKeys += rightParentSibling->numKeys + 1;
-
-            for (int i = indexOfParentInGrandparent + 1; i < grandParent->numKeys; ++i) {
-                grandParent->keys[i - 1] = grandParent->keys[i];
-                grandParent->pointers[i] = grandParent->pointers[i + 1];
-            }
-            grandParent->numKeys--;
-
-            free(rightParentSibling);
-        }
-
-
-
-        }
-
-    }
-
-    block = parentNode;
-    }
-
-    
-
-    }
-
-
-     
-    }
-
-    // cout << "Reached 1" << key << endl;
-    if (*root != nullptr && (*root)->numKeys == 0 && (*root)->nodeType != LEAF) {
-        // cout << "Boring update"  << endl;
-        IndexBlock* newRoot = (*root)->pointers[0];
-        free(*root);
-        *root = newRoot;
-    }
-
-    // cout << "Reached 1"  << key << endl;
-
-    if (*root != nullptr && (*root)->nodeType != LEAF && rootKeyNeedsUpdate(*root, key)) {
-        // Navigate to the right subtree of the deleted key
-        // cout << "Rooot" << endl;
-        IndexBlock* current = (*root)->pointers[getIndexOfKeyInRoot(*root, key) + 1];
-
-        // Find the in-order successor (leftmost key in the right subtree)
-        while (current->nodeType != LEAF) {
-            current = current->pointers[0];
-        }
-
-        // Replace the root key with the in-order successor key
-        replaceKeyInRoot(*root, key, current->keys[0]);
-    }
-
-
-    cout << "Deleted: " << key << endl;
-
-    
-
-
-}
-
-
 // Verifies if the tree is correct
 void VerifyTree(Disk* disk) {
     cout << endl << "Verifying Tree… ";
@@ -651,6 +330,7 @@ void VerifyTree(Disk* disk) {
     uint32_t nDuplicates = 0;
     set<uint32_t> dataBlocks;
     set<uint32_t> pointers;
+    set<uint32_t> keySet;
 
     queue<vData> q;
     q.push((vData){*rootPointer, 5, 2279223});
@@ -669,6 +349,8 @@ void VerifyTree(Disk* disk) {
             skip = false;
             uint32_t min = data.n1;
             for(int i = 0; i < block->numKeys; i++) {
+                ASSERT(keySet.count(block->keys[i]) == 0, "[INTERNAL] Found duplicate key %d within internal nodes", block->keys[i]);
+                keySet.insert(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[INTERNAL] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
                 q.push((vData){block->pointers[i],min,block->keys[i]-1});
                 min = block->keys[i];
@@ -684,15 +366,17 @@ void VerifyTree(Disk* disk) {
             ASSERT(block->numKeys >= floor((N+1)/2.0f), "[LEAF] Expected atleast floor((n+1)/2). Found %d", block->numKeys);
             ASSERT(block->pointers[N].blockNumber == q.front().p.blockNumber || ((IndexBlock*)disk->ReadBlock(q.front().p.blockNumber))->nodeType == DUPLICATES, "[LEAF] next (%d) != q.next (%d)", block->pointers[N].blockNumber, q.front().p.blockNumber);
             for(int i = 0; i < block->numKeys; i++) {
+                if(keySet.count(block->keys[i])) keySet.erase(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[LEAF] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
                 q.push((vData){block->pointers[i],block->keys[i],0});
             }
 
         } else if(block->nodeType == DUPLICATES) {
             ASSERT(nLeaf == numLeaf, "Expected %d leaf nodes, traveresed %d", numLeaf, nLeaf);
+            ASSERT(keySet.size() == 0, "Found %lu internal keys that do not appear in leaves", keySet.size());
             DuplicatesBlock* dB = (DuplicatesBlock*)block;
             nDuplicates++;
-            ASSERT(dB->numKeys > 0, "Duplicate Block has %d keys!", dB->numKeys);
+            ASSERT(dB->numKeys > 0 && (dB->numKeys > 1 || dB->next.blockNumber != 0), "Duplicate Block has %d keys!", dB->numKeys);
             for(int i = 0; i < dB->numKeys; i++) {
                 q.push((vData){dB->pointers[i],data.n1,data.n2});
             }
@@ -776,7 +460,7 @@ void PrintTree(Disk* disk) {
             if(block->nodeType == LEAF) {
                 DuplicatesBlock* db = (DuplicatesBlock*)disk->ReadBlock(block->pointers[i].blockNumber);
                 if(db->nodeType == DUPLICATES) {
-                    for(int j = 0; j < db->numKeys; j++){
+                    for(int j = 1; j < db->numKeys; j++){
                         cout << "-" << block->keys[i];
                     }
                     while(db->next.blockNumber != 0){

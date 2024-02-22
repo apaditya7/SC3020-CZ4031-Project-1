@@ -5,13 +5,14 @@
 #include <cassert>
 #include <algorithm> 
 #include <iterator> 
+#include <set>
 
 using namespace std;
 
 #define LEAF 0xAF
 #define INTERNAL 0xA1
 #define DUPLICATES 0xD0
-#define N 24
+#define N 3
 typedef struct IndexBlock {
     uint8_t nodeType;
     uint8_t numKeys;
@@ -229,7 +230,7 @@ void PrintTree(IndexBlock* root) {
             if(block->nodeType == LEAF && block->pointers[i] != nullptr) {
                 DuplicatesBlock* db = (DuplicatesBlock*)block->pointers[i];
                 while(db){
-                    for(int j = 0; j < db->numKeys; j++){
+                    for(int j = 1; j < db->numKeys; j++){
                         cout << "-" << db->pointers[j];
                     }
                     db = db->next;
@@ -270,6 +271,43 @@ void replaceKeyInRoot(IndexBlock* root, uint32_t oldKey, uint32_t newKey) {
         }
     }
 }
+
+void replaceKeyInInternalNode(IndexBlock* node, uint32_t oldKey, uint32_t newKey) {
+    for (int i = 0; i < node->numKeys; i++) {
+        if (node->keys[i] == oldKey) {
+            node->keys[i] = newKey;
+            break;
+        }
+    }
+}
+
+
+uint32_t findInOrderSuccessor(IndexBlock* node, uint32_t key) {
+    int keyIndex = 0;
+    while (keyIndex < node->numKeys && node->keys[keyIndex] <= key) {
+        keyIndex++;
+    }
+
+    IndexBlock* current = node->pointers[keyIndex];
+    while (current->nodeType != LEAF) {
+        current = current->pointers[0];
+    }
+    return current->keys[0];
+}
+
+
+bool keyIsInInternalNode(IndexBlock* node, uint32_t key) {
+    if (node->nodeType == LEAF) {
+        return false;
+    }
+    for (int i = 0; i < node->numKeys; i++) {
+        if (node->keys[i] == key) {
+            return true;
+        }
+    }
+    return false;
+}
+
 
 void Delete(IndexBlock** root, uint32_t key) {
     IndexBlock* block = *root;
@@ -343,7 +381,7 @@ void Delete(IndexBlock** root, uint32_t key) {
         }
 
         if (leftSibling != nullptr && leftSibling->numKeys > ceil(N / 2.0f)) {
-        
+        cout << "here" << endl;
         for(int i = block->numKeys; i > 0; i--) {
             block->keys[i] = block->keys[i - 1];
             block->pointers[i+1] = block->pointers[i];
@@ -551,6 +589,21 @@ void Delete(IndexBlock** root, uint32_t key) {
         replaceKeyInRoot(*root, key, current->keys[0]);
     }
 
+    while (!stack.empty()) {
+        IndexBlock* currentNode = stack.top();
+        cout << "Change" << endl;
+        stack.pop();
+
+        // Check if the current node is an internal node and contains the key
+        if (currentNode->nodeType != LEAF && keyIsInInternalNode(currentNode, key)) {
+            // Find the in-order successor of the key
+            uint32_t inOrderSuccessor = findInOrderSuccessor(currentNode,key);
+
+            // Replace the key in the internal node with the in-order successor
+            replaceKeyInInternalNode(currentNode, key, inOrderSuccessor);
+        }
+    }
+
 
     cout << "Deleted: " << key << endl;
 
@@ -572,6 +625,7 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
     uint32_t nLeaf = 0;
     uint32_t nInternal = 0;
     uint32_t nDuplicates = 0;
+    set<uint32_t> keySet;
 
     queue<vData> q;
     q.push((vData){root, globalMin, globalMax});
@@ -590,6 +644,8 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
             skip = false;
             uint32_t min = data.n1;
             for(int i = 0; i < block->numKeys; i++) {
+                ASSERT(keySet.count(block->keys[i]) == 0, "[INTERNAL] Found duplicate key %d within internal nodes", block->keys[i]);
+                keySet.insert(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[INTERNAL] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
                 q.push((vData){block->pointers[i],min,block->keys[i]-1});
                 min = block->keys[i];
@@ -605,6 +661,7 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
             ASSERT(block->numKeys >= floor((N+1)/2.0f), "[LEAF] Expected atleast floor((n+1)/2). Found %d", block->numKeys);
             ASSERT(block->pointers[N] == q.front().p || q.front().p->nodeType == DUPLICATES, "[LEAF] next (%lx) != q.next (%lx)", (uintptr_t)block->pointers[N], (uintptr_t)q.front().p);
             for(int i = 0; i < block->numKeys; i++) {
+                if(keySet.count(block->keys[i])) keySet.erase(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[LEAF] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
                 if(block->pointers[i] != nullptr) {
                     q.push((vData){block->pointers[i],block->keys[i],0});
@@ -613,9 +670,10 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
 
         } else if(block->nodeType == DUPLICATES) {
             ASSERT(nLeaf == numLeaf, "Expected %d leaf nodes, traveresed %d", numLeaf, nLeaf);
+            ASSERT(keySet.size() == 0, "Found %lu internal keys that do not appear in leaves", keySet.size());
             DuplicatesBlock* dB = (DuplicatesBlock*)block;
             nDuplicates++;
-            ASSERT(dB->numKeys > 0, "Duplicate Block has %d keys!", dB->numKeys);
+            ASSERT(dB->numKeys > 1 && (dB->numKeys > 1 || dB->next != nullptr), "Duplicate Block has %d keys!", dB->numKeys);
             while(dB->next) {
                 nDuplicates++;
                 dB = dB->next;
@@ -637,8 +695,8 @@ int main() {
     root->nodeType = LEAF;
     root->numKeys = 0;
 
-    uint32_t inserts[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,1,1,1,1,2,2,2,2,2,6,6,6,8,8,8,13,13,13,12,12,12,11,11,11};
-    uint32_t max = inserts[0];
+    uint32_t inserts[] = {1, 4, 7, 10, 16, 19, 20, 21, 25, 31};
+     uint32_t max = inserts[0];
     uint32_t min = inserts[0];
     for(int i = 0; i < sizeof(inserts)/sizeof(uint32_t); i++){
         Insert(&root, inserts[i]);
@@ -651,9 +709,10 @@ int main() {
     
     // Delete(&root,10);
     PrintTree(root);
-    Delete(&root,1);
-    VerifyTree(root, min, max);
+    Delete(&root,19);
+    // VerifyTree(root, min, max);
     PrintTree(root);
+    VerifyTree(root, min, max);
     // Delete(&root,14);
     // PrintTree(root);
 
