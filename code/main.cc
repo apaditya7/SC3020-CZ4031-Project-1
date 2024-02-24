@@ -6,6 +6,7 @@
 #include <stack>
 #include <queue>
 #include <set>
+#include <chrono>
 
 #include "constants.h"
 #include "disk.h"
@@ -407,11 +408,202 @@ void VerifyTree(Disk* disk) {
     cout << "Passed!" << endl;
 }
 
+IndexedSearchResult IndexedSearch(Disk* disk, int min, int max) {
+    uint32_t nInternal = 0;
+    uint32_t nLeaf = 0;
+    uint32_t nDuplicates = 0;
+
+    std::set<int> visitedData;
+    uint32_t totalRecords = 0;
+    float totalRating = 0;
+
+    IndexBlock *block = (IndexBlock *)disk->ReadBlock(rootPointer->blockNumber);
+
+    while (block->nodeType != LEAF) // search the key until leaf node
+    {
+        int i;
+        for (i = 0; i < block->numKeys; i++)
+        {
+            if (min < block->keys[i])
+                break;
+        }
+        uint32_t nextBlock = block->pointers[i].blockNumber;
+        free(block);
+        block = (IndexBlock *)disk->ReadBlock(nextBlock);
+        nInternal++;
+    }
+
+    nLeaf++;
+
+    int keyIndex;
+    for (keyIndex = 0; keyIndex < block->numKeys; keyIndex++)
+    {
+        if (block->keys[keyIndex] >= min)
+        {
+            break;
+        }
+    }
+
+    while(block->keys[keyIndex] <= max) {
+        DuplicatesBlock *db = (DuplicatesBlock *)disk->ReadBlock(block->pointers[keyIndex].blockNumber);
+        if(db->nodeType == DUPLICATES) {
+            while (true) // to iterate through duplicatesblocksss
+            {
+                nDuplicates++;
+                for (int j = 0; j < db->numKeys; j++) // to iterate the keys in a duplicatesblock
+                {
+                    visitedData.insert(db->pointers[j].blockNumber);
+                    DataBlock *temp = (DataBlock *)disk->ReadBlock(db->pointers[j].blockNumber);
+                    totalRating += temp->records[db->pointers[j].recordIndex].averageRating;
+                    totalRecords++;
+                    free(temp);
+                }
+                if (db->next.blockNumber == 0)
+                {
+                    break;
+                }
+                uint32_t nextBlock = db->next.blockNumber;
+                free(db);
+                db = (DuplicatesBlock *)disk->ReadBlock(nextBlock); // go to the next duplicatesblock
+            }
+        } else {
+            DataBlock* temp = (DataBlock*)db;
+            visitedData.insert(block->pointers[keyIndex].blockNumber);
+            totalRating += temp->records[block->pointers[keyIndex].recordIndex].averageRating;
+            totalRecords++;
+        }
+        free(db);
+
+        keyIndex++;
+
+        if(keyIndex == block->numKeys) {
+            uint32_t nextBlock = block->pointers[N].blockNumber;
+            if(block->keys[keyIndex] == max || nextBlock == 0) break;
+            free(block);
+            block = (IndexBlock*)disk->ReadBlock(nextBlock);
+            nLeaf++;
+            keyIndex = 0;
+        }
+    }
+
+    free(block);
+
+    return (IndexedSearchResult) { nInternal, nLeaf, nDuplicates, visitedData.size(), totalRecords, totalRating/(float)totalRecords };
+}
+
+SearchResult LinearSearch(Disk* disk, int min, int max) {
+    uint32_t nBlocks = 0;
+    uint32_t totalRecords = 0;
+    float totalRating = 0;
+
+    if(min == max) {
+        for(int i = 1; i <= numDataBlocks; i++){
+            DataBlock* block = (DataBlock*)disk->ReadBlock(i);
+            nBlocks++;
+            for(int k = 0; k < RECORDS_PER_BLOCK; k++){
+                if(block->records[k].occupied) {
+                    if(block->records[k].numVotes == min) {
+                        totalRating += block->records[k].averageRating;
+                        totalRecords++;
+                    }
+                }
+            }
+            free(block);
+        }
+    } else {
+        for(int i = 1; i <= numDataBlocks; i++){
+            DataBlock* block = (DataBlock*)disk->ReadBlock(i);
+            nBlocks++;
+            for(int k = 0; k < RECORDS_PER_BLOCK; k++){
+                if(block->records[k].occupied) {
+                    if(block->records[k].numVotes >= min && block->records[k].numVotes <= max) {
+                        totalRating += block->records[k].averageRating;
+                        totalRecords++;
+                    }
+                }
+            }
+            free(block);
+        }
+    }
+    
+    return (SearchResult) { nBlocks, totalRecords, totalRating/(float)totalRecords };
+}
+
+void PrintSearchResult(SearchResult sr, long long timeTaken) {
+    cout << "> Linear Search Statistics" << endl;
+    cout << "a) Data Blocks Accessed: " << sr.nData << endl;
+    cout << "b) Found " << sr.recordsFound << " records" << endl;
+    cout << "c) Average Rating: " << sr.averageRating << endl;
+    cout << "d) Time Taken: " << timeTaken/SEARCH_TRIALS << "μs on average for " << SEARCH_TRIALS << " trials" << endl;
+}
+
+void PrintSearchResult(IndexedSearchResult isr, long long timeTaken) {
+    cout << "> Indexed Search Statistics" << endl;
+    cout << "a) Index Blocks Accessed: " << isr.nInternal << " Internal, " << isr.nLeaf << " Leaf, " << isr.nDuplicates << " Duplicates. Total is " << isr.nInternal + isr.nLeaf + isr.nDuplicates << endl;
+    cout << "b) Data Blocks Accessed: " << isr.nData << endl;
+    cout << "c) Found " << isr.recordsFound << " records" << endl;
+    cout << "d) Average Rating: " << isr.averageRating << endl;
+    cout << "e) Time Taken: " << timeTaken/SEARCH_TRIALS << "μs on average for " << SEARCH_TRIALS << " trials" << endl;
+}
+
+void Experiment3(Disk *disk)
+{
+    cout << endl;
+    cout << "Running Experiment 3" << endl;
+    cout << "Searching for [500]" << endl;
+    
+    SearchResult sr;
+    IndexedSearchResult isr;
+    chrono::steady_clock::time_point start, end;
+
+    start = chrono::steady_clock::now();
+    for(int i = 0; i < SEARCH_TRIALS; i++) {
+        isr = IndexedSearch(disk, 500, 500);
+    }
+    end = chrono::steady_clock::now();
+    PrintSearchResult(isr, chrono::duration_cast<chrono::microseconds>(end - start).count());
+    
+    start = chrono::steady_clock::now();
+    for(int i = 0; i < SEARCH_TRIALS; i++) {
+        sr = LinearSearch(disk, 500, 500);
+    }
+    end = chrono::steady_clock::now();
+    PrintSearchResult(sr, chrono::duration_cast<chrono::microseconds>(end - start).count());
+}
+
+void Experiment4(Disk *disk)
+{
+    cout << endl;
+    cout << "Running Experiment 4" << endl;
+    cout << "Searching for [30000, 40000]" << endl;
+    
+    SearchResult sr;
+    IndexedSearchResult isr;
+    chrono::steady_clock::time_point start, end;
+
+    start = chrono::steady_clock::now();
+    for(int i = 0; i < SEARCH_TRIALS; i++) {
+        isr = IndexedSearch(disk, 30000, 40000);
+    }
+    end = chrono::steady_clock::now();
+    PrintSearchResult(isr, chrono::duration_cast<chrono::microseconds>(end - start).count());
+
+    start = chrono::steady_clock::now();
+    for(int i = 0; i < SEARCH_TRIALS; i++) {
+        sr = LinearSearch(disk, 30000, 40000);
+    }
+    end = chrono::steady_clock::now();
+    PrintSearchResult(sr, chrono::duration_cast<chrono::microseconds>(end - start).count());
+}
+
 int main() {
     Disk* disk = new Disk();
     Experiment1(disk, "data.tsv");
     Experiment2(disk);
     VerifyTree(disk);
+    Experiment3(disk);
+    Experiment4(disk);
+  
 }
 
 // EXTRAS

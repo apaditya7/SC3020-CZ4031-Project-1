@@ -8,6 +8,7 @@
 #include <cmath>
 
 #define N 24
+#define SEARCH_TRIALS 10
 #define DISK_SIZE 200 * 1024 * 1024
 #define RECORD_SIZE sizeof(Record)
 #define BLOCK_SIZE sizeof(DataBlock)
@@ -64,5 +65,19 @@ typedef struct vData {
     uint32_t n2;
 } vData;
 
+typedef struct SearchResult {
+    uint32_t nData;
+    uint32_t recordsFound;
+    float averageRating;
+} SearchResult;
+
+typedef struct IndexedSearchResult {
+    uint32_t nInternal;
+    uint32_t nLeaf;
+    uint32_t nDuplicates;
+    uint32_t nData;
+    uint32_t recordsFound;
+    float averageRating;
+} IndexedSearchResult;
 
 #endif
