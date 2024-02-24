@@ -15,7 +15,7 @@ using namespace std;
 
 uint32_t numRecords;
 uint32_t numDataBlocks;
-uint32_t currentFreeBlock = 1;
+uint32_t currentFreeBlock = START_BLOCK;
 
 void Experiment1(Disk* disk, string filename) {
     cout << "Running Experiment 1" << endl;
@@ -300,7 +300,7 @@ void Experiment2(Disk* disk) {
     disk->WriteBlock(rootPointer->blockNumber,(uint8_t*) root);
     free(root);
 
-    for(uint32_t i = 1; i <= numDataBlocks; i++){
+    for(uint32_t i = START_BLOCK; i < numDataBlocks + START_BLOCK; i++){
         DataBlock* dataBlock = (DataBlock*)disk->ReadBlock(i);
         for(uint32_t k = 0; k < RECORDS_PER_BLOCK; k++){
             if(dataBlock->records[k].occupied) {
@@ -497,7 +497,7 @@ SearchResult LinearSearch(Disk* disk, int min, int max) {
     float totalRating = 0;
 
     if(min == max) {
-        for(int i = 1; i <= numDataBlocks; i++){
+        for(int i = START_BLOCK; i < numDataBlocks + START_BLOCK; i++){
             DataBlock* block = (DataBlock*)disk->ReadBlock(i);
             nBlocks++;
             for(int k = 0; k < RECORDS_PER_BLOCK; k++){
@@ -511,7 +511,7 @@ SearchResult LinearSearch(Disk* disk, int min, int max) {
             free(block);
         }
     } else {
-        for(int i = 1; i <= numDataBlocks; i++){
+        for(int i = START_BLOCK; i < numDataBlocks + START_BLOCK; i++){
             DataBlock* block = (DataBlock*)disk->ReadBlock(i);
             nBlocks++;
             for(int k = 0; k < RECORDS_PER_BLOCK; k++){
@@ -611,7 +611,7 @@ int main() {
 // Used for verification of loading. running diff on the output and data.tsv
 void PrintAllRecords(Disk* disk) {
     cout << "tconst\taverageRating\tnumVotes" << endl;
-    for(int i = 1; i < currentFreeBlock; ++i){
+    for(int i = START_BLOCK; i < numDataBlocks + START_BLOCK; ++i){
         DataBlock* block = (DataBlock*)disk->ReadBlock(i);
         for(int k = 0; k < RECORDS_PER_BLOCK; ++k){
             if(!block->records[k].occupied) continue;

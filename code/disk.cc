@@ -6,8 +6,8 @@ Disk::Disk() {
 }
 
 uint8_t* Disk::ReadBlock(uint32_t blockNumber) {
-    assert(blockNumber >= 1 && blockNumber <= NUM_BLOCKS);
-    blockNumber -= 1;
+    assert(blockNumber >= START_BLOCK && blockNumber <= NUM_BLOCKS);
+    blockNumber -= START_BLOCK;
 
     // pretend to seek and rotate
     uint8_t* blockPointer = (uint8_t*)((uintptr_t)this->disk + (blockNumber * BLOCK_SIZE));
@@ -20,8 +20,8 @@ uint8_t* Disk::ReadBlock(uint32_t blockNumber) {
 }
 
 void Disk::WriteBlock(uint32_t blockNumber, uint8_t* block) {
-    assert(blockNumber >= 1 && blockNumber <= NUM_BLOCKS);
-    blockNumber -= 1;
+    assert(blockNumber >= START_BLOCK && blockNumber <= NUM_BLOCKS);
+    blockNumber -= START_BLOCK;
 
     // pretend to seek and rotate
     uint8_t* blockPointer = (uint8_t*)((uintptr_t)this->disk + (blockNumber * BLOCK_SIZE));
