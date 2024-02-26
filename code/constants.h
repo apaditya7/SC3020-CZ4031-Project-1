@@ -8,7 +8,7 @@
 #include <cmath>
 
 #define N 24
-#define SEARCH_TRIALS 10
+#define SEARCH_TRIALS 100
 #define START_BLOCK 1
 #define DISK_SIZE 200 * 1024 * 1024
 #define RECORD_SIZE sizeof(Record)

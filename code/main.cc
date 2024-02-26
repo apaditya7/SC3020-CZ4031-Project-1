@@ -7,6 +7,7 @@
 #include <queue>
 #include <set>
 #include <chrono>
+#include <algorithm>
 
 #include "constants.h"
 #include "disk.h"
@@ -541,7 +542,7 @@ void PrintSearchResult(SearchResult sr, long long timeTaken) {
     cout << "a) Data Blocks Accessed: " << sr.nData << endl;
     cout << "b) Found " << sr.recordsFound << " records" << endl;
     cout << "c) Average Rating: " << sr.averageRating << endl;
-    cout << "d) Time Taken: " << timeTaken/SEARCH_TRIALS << "μs on average for " << SEARCH_TRIALS << " trials" << endl;
+    cout << "d) Time Taken: " << timeTaken/1000.0f << "ms (median of " << SEARCH_TRIALS << " trials)" << endl;
 }
 
 void PrintSearchResult(IndexedSearchResult isr, long long timeTaken) {
@@ -550,7 +551,13 @@ void PrintSearchResult(IndexedSearchResult isr, long long timeTaken) {
     cout << "b) Data Blocks Accessed: " << isr.nData << endl;
     cout << "c) Found " << isr.recordsFound << " records" << endl;
     cout << "d) Average Rating: " << isr.averageRating << endl;
-    cout << "e) Time Taken: " << timeTaken/SEARCH_TRIALS << "μs on average for " << SEARCH_TRIALS << " trials" << endl;
+    cout << "e) Time Taken: " << timeTaken/1000.0f << "ms (median of " << SEARCH_TRIALS << " trials)" << endl;
+}
+
+long long Median(vector<long long> timings) {
+    vector<long long>::iterator it = timings.begin() + timings.size() / 2;
+    nth_element(timings.begin(), it, timings.end());
+    return timings[timings.size() / 2];
 }
 
 void Experiment3(Disk *disk)
@@ -562,20 +569,26 @@ void Experiment3(Disk *disk)
     SearchResult sr;
     IndexedSearchResult isr;
     chrono::steady_clock::time_point start, end;
+    vector<long long> timings;
 
-    start = chrono::steady_clock::now();
     for(int i = 0; i < SEARCH_TRIALS; i++) {
+        start = chrono::steady_clock::now();
         isr = IndexedSearch(disk, 500, 500);
+        end = chrono::steady_clock::now();
+        timings.push_back(chrono::duration_cast<chrono::microseconds>(end - start).count());
     }
-    end = chrono::steady_clock::now();
-    PrintSearchResult(isr, chrono::duration_cast<chrono::microseconds>(end - start).count());
     
-    start = chrono::steady_clock::now();
+    PrintSearchResult(isr, Median(timings));
+    timings.clear();
+    
     for(int i = 0; i < SEARCH_TRIALS; i++) {
+        start = chrono::steady_clock::now();
         sr = LinearSearch(disk, 500, 500);
+        end = chrono::steady_clock::now();
+        timings.push_back(chrono::duration_cast<chrono::microseconds>(end - start).count());
     }
-    end = chrono::steady_clock::now();
-    PrintSearchResult(sr, chrono::duration_cast<chrono::microseconds>(end - start).count());
+    
+    PrintSearchResult(sr,  Median(timings));
 }
 
 void Experiment4(Disk *disk)
@@ -584,23 +597,29 @@ void Experiment4(Disk *disk)
     cout << "Running Experiment 4" << endl;
     cout << "Searching for [30000, 40000]" << endl;
     
-    SearchResult sr;
+     SearchResult sr;
     IndexedSearchResult isr;
     chrono::steady_clock::time_point start, end;
+    vector<long long> timings;
 
-    start = chrono::steady_clock::now();
     for(int i = 0; i < SEARCH_TRIALS; i++) {
+        start = chrono::steady_clock::now();
         isr = IndexedSearch(disk, 30000, 40000);
+        end = chrono::steady_clock::now();
+        timings.push_back(chrono::duration_cast<chrono::microseconds>(end - start).count());
     }
-    end = chrono::steady_clock::now();
-    PrintSearchResult(isr, chrono::duration_cast<chrono::microseconds>(end - start).count());
-
-    start = chrono::steady_clock::now();
+    
+    PrintSearchResult(isr, Median(timings));
+    timings.clear();
+    
     for(int i = 0; i < SEARCH_TRIALS; i++) {
+        start = chrono::steady_clock::now();
         sr = LinearSearch(disk, 30000, 40000);
+        end = chrono::steady_clock::now();
+        timings.push_back(chrono::duration_cast<chrono::microseconds>(end - start).count());
     }
-    end = chrono::steady_clock::now();
-    PrintSearchResult(sr, chrono::duration_cast<chrono::microseconds>(end - start).count());
+    
+    PrintSearchResult(sr,  Median(timings));
 }
 
 int main() {
