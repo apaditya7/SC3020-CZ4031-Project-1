@@ -74,9 +74,11 @@ uint32_t numLevels = 1;
 uint32_t numLeaf = 1;
 uint32_t numInternal;
 uint32_t numDuplicates;
+set<uint32_t> keySet;
 RecordPointer* rootPointer;
 
 void Insert(Disk* disk, int key, RecordPointer pointer) {
+    keySet.insert(key);
     IndexBlock* block = (IndexBlock*)disk->ReadBlock(rootPointer->blockNumber);
     stack<IndexBlock*> blockStack;
     stack<RecordPointer> pointerStack;
@@ -331,7 +333,8 @@ void VerifyTree(Disk* disk) {
     uint32_t nDuplicates = 0;
     set<uint32_t> dataBlocks;
     set<uint32_t> pointers;
-    set<uint32_t> keySet;
+    set<uint32_t> internalKeySet;
+    set<uint32_t> leafKeySet;
 
     queue<vData> q;
     q.push((vData){*rootPointer, 5, 2279223});
@@ -350,8 +353,8 @@ void VerifyTree(Disk* disk) {
             skip = false;
             uint32_t min = data.n1;
             for(int i = 0; i < block->numKeys; i++) {
-                ASSERT(keySet.count(block->keys[i]) == 0, "[INTERNAL] Found duplicate key %d within internal nodes", block->keys[i]);
-                keySet.insert(block->keys[i]);
+                ASSERT(internalKeySet.count(block->keys[i]) == 0, "[INTERNAL] Found duplicate key %d within internal nodes", block->keys[i]);
+                internalKeySet.insert(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[INTERNAL] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
                 q.push((vData){block->pointers[i],min,block->keys[i]-1});
                 min = block->keys[i];
@@ -362,19 +365,20 @@ void VerifyTree(Disk* disk) {
         } else if(block->nodeType == LEAF) {
             ASSERT(nInternal == numInternal, "Expected %d internal nodes, traveresed %d", numInternal, nInternal);
             nLeaf++;
-            ASSERT(block->keys[0] >= data.n1, "[LEAF] Minimum is %d, found %d", data.n1, block->keys[0]);
-            ASSERT(block->keys[block->numKeys - 1] <= data.n2, "[LEAF] Maximum is %d, found %d", data.n2, block->keys[block->numKeys - 1]);
-            ASSERT(block->numKeys >= floor((N+1)/2.0f), "[LEAF] Expected atleast floor((n+1)/2). Found %d", block->numKeys);
-            ASSERT(block->pointers[N].blockNumber == q.front().p.blockNumber || ((IndexBlock*)disk->ReadBlock(q.front().p.blockNumber))->nodeType == DUPLICATES, "[LEAF] next (%d) != q.next (%d)", block->pointers[N].blockNumber, q.front().p.blockNumber);
+            ASSERT((skip && block->numKeys == 0) || block->keys[0] >= data.n1, "[LEAF] Minimum is %d, found %d", data.n1, block->keys[0]);
+            ASSERT((skip && block->numKeys == 0) || block->keys[block->numKeys - 1] <= data.n2, "[LEAF] Maximum is %d, found %d", data.n2, block->keys[block->numKeys - 1]);
+            ASSERT(skip || block->numKeys >= floor((N+1)/2.0f), "[LEAF] Expected atleast floor((n+1)/2). Found %d", block->numKeys);
+            ASSERT(skip || block->pointers[N].blockNumber == q.front().p.blockNumber || (numDuplicates > 0 && ((IndexBlock*)disk->ReadBlock(q.front().p.blockNumber))->nodeType == DUPLICATES) || (numDuplicates == 0 && q.size() == 0), "[LEAF] next (%d) != q.next (%d)", block->pointers[N].blockNumber, q.front().p.blockNumber);
+            skip = false;
             for(int i = 0; i < block->numKeys; i++) {
-                if(keySet.count(block->keys[i])) keySet.erase(block->keys[i]);
+                ASSERT(leafKeySet.count(block->keys[i]) == 0, "[LEAD] Found duplicate key %d within leaf nodes", block->keys[i]);
+                leafKeySet.insert(block->keys[i]);
+                if(internalKeySet.count(block->keys[i])) internalKeySet.erase(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[LEAF] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
                 q.push((vData){block->pointers[i],block->keys[i],0});
             }
 
         } else if(block->nodeType == DUPLICATES) {
-            ASSERT(nLeaf == numLeaf, "Expected %d leaf nodes, traveresed %d", numLeaf, nLeaf);
-            ASSERT(keySet.size() == 0, "Found %lu internal keys that do not appear in leaves", keySet.size());
             DuplicatesBlock* dB = (DuplicatesBlock*)block;
             nDuplicates++;
             ASSERT(dB->numKeys > 0 && (dB->numKeys > 1 || dB->next.blockNumber != 0), "Duplicate Block has %d keys!", dB->numKeys);
@@ -401,6 +405,9 @@ void VerifyTree(Disk* disk) {
         }
     }
 
+    ASSERT(nLeaf == numLeaf, "Expected %d leaf nodes, traveresed %d", numLeaf, nLeaf);
+    ASSERT(keySet == leafKeySet, "Mismatch of %d keys between expected keys and leaf keys", abs((int)(keySet.size() - leafKeySet.size())));
+    ASSERT(internalKeySet.size() == 0, "Found %lu internal keys that do not appear in leaves", internalKeySet.size());
     ASSERT(nDuplicates == numDuplicates, "Expected %d duplicate nodes, traveresed %d", numDuplicates, nDuplicates);
     ASSERT(dataBlocks.size() == numDataBlocks, "Expected %u data blocks, traveresed %lu", numDataBlocks, dataBlocks.size());
     ASSERT(pointers.size() == numRecords, "Expected %u records, traveresed %lu", numRecords, pointers.size());
