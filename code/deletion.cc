@@ -6,13 +6,16 @@
 #include <algorithm> 
 #include <iterator> 
 #include <set>
+#include <fstream>
+#include <algorithm>
+#include <random>
 
 using namespace std;
 
 #define LEAF 0xAF
 #define INTERNAL 0xA1
 #define DUPLICATES 0xD0
-#define N 3
+#define N 24
 typedef struct IndexBlock {
     uint8_t nodeType;
     uint8_t numKeys;
@@ -231,7 +234,7 @@ void PrintTree(IndexBlock* root) {
                 DuplicatesBlock* db = (DuplicatesBlock*)block->pointers[i];
                 while(db){
                     for(int j = 1; j < db->numKeys; j++){
-                        cout << "-" << db->pointers[j];
+                        // cout << "-" << db->pointers[j];
                     }
                     db = db->next;
                 }
@@ -300,6 +303,7 @@ bool keyIsInInternalNode(IndexBlock* node, uint32_t key) {
     if (node->nodeType == LEAF) {
         return false;
     }
+    // cout << "checking" << endl;
     for (int i = 0; i < node->numKeys; i++) {
         if (node->keys[i] == key) {
             return true;
@@ -339,6 +343,16 @@ void Delete(IndexBlock** root, uint32_t key) {
 
     // cout << "Reached c " << key << endl;
 
+    DuplicatesBlock* db = (DuplicatesBlock*) block->pointers[keyIndex];
+    if(db != nullptr && db->nodeType == DUPLICATES) {
+        do {
+            DuplicatesBlock* next = db->next;
+            free(db);
+            numDuplicates--;
+            db = next;
+        } while(db != nullptr);
+    }
+
     for(int i = keyIndex; i < block->numKeys - 1; i++) {
         block->keys[i] = block->keys[i + 1];
         block->pointers[i] = block->pointers[i + 1];
@@ -360,24 +374,21 @@ void Delete(IndexBlock** root, uint32_t key) {
         // stack.pop();
         // cout << "Parent 1: " << parent->keys[0] << endl;
         
-
-        
         for (int i = 0; i <= parent->numKeys; i++) {
             if (parent->pointers[i] == block) {
                 indexOfBlockInParent = i;
                 break;
             }
         }
-
         
         if (indexOfBlockInParent > 0) {
             leftSibling = parent->pointers[indexOfBlockInParent - 1];
-            // cout << "Left Sibling: " << leftSibling->keys[0] << endl;
+            cout << "Left Sibling: " << leftSibling->keys[0] << endl;
 
         }
         if (indexOfBlockInParent < parent->numKeys) {
             rightSibling = parent->pointers[indexOfBlockInParent + 1];
-            // cout << "Right Sibling: " << rightSibling->keys[0] << endl;
+            cout << "Right Sibling: " << rightSibling->keys[0] << endl;
         }
 
         if (leftSibling != nullptr && leftSibling->numKeys > ceil(N / 2.0f)) {
@@ -432,13 +443,18 @@ void Delete(IndexBlock** root, uint32_t key) {
         mergeInto->keys[mergeInto->numKeys] = mergeFrom->keys[i];
         mergeInto->pointers[mergeInto->numKeys] = mergeFrom->pointers[i];
         mergeInto->numKeys++;
-    }
+    }   
+
+    mergeInto->pointers[N]=mergeFrom->pointers[N];
+    // cout << "PRRR" << mergeFrom->pointers[N]->keys[0] << endl;
+
 
     for (int i = siblingIndex + 1; i < parent->numKeys; i++) {
         parent->keys[i - 1] = parent->keys[i];
         parent->pointers[i] = parent->pointers[i + 1];
     }
     parent->numKeys--;
+    numLeaf--;
 
     if (mergeFrom != mergeInto) {
         free(mergeFrom);
@@ -459,7 +475,7 @@ void Delete(IndexBlock** root, uint32_t key) {
     stack.pop();
 
     if (parentNode->numKeys < floor(N / 2.0f)) {
-        cout << "Underflow: " << parentNode->keys[0] << endl;
+        // cout << "Underflow: " << parentNode->keys[0] << endl;
         IndexBlock* grandParent = !stack.empty() ? stack.top() : nullptr;
         IndexBlock* leftParentSibling = nullptr;
         IndexBlock* rightParentSibling = nullptr;
@@ -521,11 +537,15 @@ void Delete(IndexBlock** root, uint32_t key) {
             leftParentSibling->numKeys += (1 + parentNode->numKeys);
 
             for (int i = indexOfParentInGrandparent; i < grandParent->numKeys - 1; ++i) {
-                grandParent->keys[i] = grandParent->keys[i + 1];
-                grandParent->pointers[i + 1] = grandParent->pointers[i + 2];
+                grandParent->keys[i - 1] = grandParent->keys[i];
+                grandParent->pointers[i] = grandParent->pointers[i + 1];
             }
             grandParent->numKeys--;
+            numInternal--;
         } 
+
+
+
         else if (rightParentSibling != nullptr && rightParentSibling->numKeys <= ceil(N / 2.0f)) {
           
             parentNode->keys[parentNode->numKeys] = grandParent->keys[indexOfParentInGrandparent];
@@ -544,15 +564,34 @@ void Delete(IndexBlock** root, uint32_t key) {
                 grandParent->pointers[i] = grandParent->pointers[i + 1];
             }
             grandParent->numKeys--;
+            numInternal--;
 
             free(rightParentSibling);
         }
 
 
 
+
         }
 
+        
+        
     }
+    
+    
+    
+
+    // Check if the current node is an internal node and contains the key
+    if (parentNode->nodeType != LEAF && keyIsInInternalNode(parentNode, key)) {
+        
+        // Find the in-order successor of the key
+        uint32_t inOrderSuccessor = findInOrderSuccessor(parentNode,key);
+
+        cout << "Changing "<< key << "with" << inOrderSuccessor << endl;
+        // Replace the key in the internal node with the in-order successor
+        replaceKeyInInternalNode(parentNode, key, inOrderSuccessor);
+    }
+
 
     block = parentNode;
     }
@@ -562,7 +601,7 @@ void Delete(IndexBlock** root, uint32_t key) {
     }
 
 
-     
+
     }
 
     // cout << "Reached 1" << key << endl;
@@ -571,6 +610,7 @@ void Delete(IndexBlock** root, uint32_t key) {
         IndexBlock* newRoot = (*root)->pointers[0];
         free(*root);
         *root = newRoot;
+        numInternal--;
     }
 
     // cout << "Reached 1"  << key << endl;
@@ -588,7 +628,7 @@ void Delete(IndexBlock** root, uint32_t key) {
         // Replace the root key with the in-order successor key
         replaceKeyInRoot(*root, key, current->keys[0]);
     }
-
+    
     while (!stack.empty()) {
         IndexBlock* currentNode = stack.top();
         cout << "Change" << endl;
@@ -606,10 +646,6 @@ void Delete(IndexBlock** root, uint32_t key) {
 
 
     cout << "Deleted: " << key << endl;
-
-    
-
-
 }
 
 #define ASSERT(cond, msg, args...) assert((cond) || !fprintf(stderr, (msg "\n"), args))
@@ -641,7 +677,6 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
             ASSERT(block->keys[0] >= data.n1, "[INTERNAL] Minimum is %d, found %d", data.n1, block->keys[0]);
             ASSERT(block->keys[block->numKeys - 1] <= data.n2, "[INTERNAL] Maximum is %d, found %d", data.n2, block->keys[block->numKeys - 1]);
             ASSERT(skip || block->numKeys >= floor(N/2.0f), "[INTERNAL] Expected atleast floor(n/2) keys. Found %d", block->numKeys);
-            skip = false;
             uint32_t min = data.n1;
             for(int i = 0; i < block->numKeys; i++) {
                 ASSERT(keySet.count(block->keys[i]) == 0, "[INTERNAL] Found duplicate key %d within internal nodes", block->keys[i]);
@@ -656,10 +691,11 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
         } else if(block->nodeType == LEAF) {
             ASSERT(nInternal == numInternal, "Expected %d internal nodes, traveresed %d", numInternal, nInternal);
             nLeaf++;
-            ASSERT(block->keys[0] >= data.n1, "[LEAF] Minimum is %d, found %d", data.n1, block->keys[0]);
-            ASSERT(block->keys[block->numKeys - 1] <= data.n2, "[LEAF] Maximum is %d, found %d", data.n2, block->keys[block->numKeys - 1]);
-            ASSERT(block->numKeys >= floor((N+1)/2.0f), "[LEAF] Expected atleast floor((n+1)/2). Found %d", block->numKeys);
-            ASSERT(block->pointers[N] == q.front().p || q.front().p->nodeType == DUPLICATES, "[LEAF] next (%lx) != q.next (%lx)", (uintptr_t)block->pointers[N], (uintptr_t)q.front().p);
+            ASSERT((skip && block->numKeys == 0) || block->keys[0] >= data.n1, "[LEAF] Minimum is %d, found %d", data.n1, block->keys[0]);
+            ASSERT((skip && block->numKeys == 0) || block->keys[block->numKeys - 1] <= data.n2, "[LEAF] Maximum is %d, found %d", data.n2, block->keys[block->numKeys - 1]);
+            ASSERT(skip || block->numKeys >= floor((N+1)/2.0f), "[LEAF] Expected atleast floor((n+1)/2). Found %d", block->numKeys);
+            ASSERT(skip || block->pointers[N] == q.front().p || (numDuplicates > 0 && q.front().p->nodeType == DUPLICATES) || (numDuplicates == 0 && q.size() == 0), "[LEAF] next (%lx) != q.next (%lx)", (uintptr_t)block->pointers[N], (uintptr_t)q.front().p);
+            skip = false;
             for(int i = 0; i < block->numKeys; i++) {
                 if(keySet.count(block->keys[i])) keySet.erase(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[LEAF] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
@@ -669,11 +705,9 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
             }
 
         } else if(block->nodeType == DUPLICATES) {
-            ASSERT(nLeaf == numLeaf, "Expected %d leaf nodes, traveresed %d", numLeaf, nLeaf);
-            ASSERT(keySet.size() == 0, "Found %lu internal keys that do not appear in leaves", keySet.size());
             DuplicatesBlock* dB = (DuplicatesBlock*)block;
             nDuplicates++;
-            ASSERT(dB->numKeys > 1 && (dB->numKeys > 1 || dB->next != nullptr), "Duplicate Block has %d keys!", dB->numKeys);
+            ASSERT(dB->numKeys > 0 && (dB->numKeys > 1 || dB->next != nullptr), "Duplicate Block has %d keys!", dB->numKeys);
             while(dB->next) {
                 nDuplicates++;
                 dB = dB->next;
@@ -685,6 +719,11 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
             ASSERT(0 == 1, "Invalid Block Type %d", block->nodeType);
         }
     }
+    ASSERT(nLeaf == numLeaf, "Expected %d leaf nodes, traveresed %d", numLeaf, nLeaf);
+    if(keySet.size() != 0) {
+        cout << "EXTRA: " << *keySet.begin() << endl;
+    }
+    ASSERT(keySet.size() == 0, "Found %lu internal keys that do not appear in leaves", keySet.size());
     ASSERT(nDuplicates == numDuplicates, "Expected %d duplicate nodes, traveresed %d", numDuplicates, nDuplicates);
     cout << "Passed!" << endl;
 }
@@ -695,24 +734,25 @@ int main() {
     root->nodeType = LEAF;
     root->numKeys = 0;
 
-    uint32_t inserts[] = {1, 4, 7, 10, 16, 19, 20, 21, 25, 31};
-     uint32_t max = inserts[0];
-    uint32_t min = inserts[0];
-    for(int i = 0; i < sizeof(inserts)/sizeof(uint32_t); i++){
-        Insert(&root, inserts[i]);
-        cout << "Inserted " << inserts[i] << endl;
-        if(inserts[i] > max) max = inserts[i];
-        if(inserts[i] < min) min = inserts[i];
-        // PrintTree(root);
-    }
-    VerifyTree(root, min, max);
-    
-    // Delete(&root,10);
-    PrintTree(root);
-    Delete(&root,19);
+    // uint32_t inserts[] = {1, 4, 7, 10, 16, 19, 20, 21, 25, 31};
+    //  uint32_t max = inserts[0];
+    // uint32_t min = inserts[0];
+    // for(int i = 0; i < sizeof(inserts)/sizeof(uint32_t); i++){
+    //     Insert(&root, inserts[i]);
+    //     cout << "Inserted " << inserts[i] << endl;
+    //     if(inserts[i] > max) max = inserts[i];
+    //     if(inserts[i] < min) min = inserts[i];
+    //     // PrintTree(root);
+    // }
     // VerifyTree(root, min, max);
-    PrintTree(root);
-    VerifyTree(root, min, max);
+    
+    // // Delete(&root,10);
+    // PrintTree(root);
+    // Delete(&root,7);
+    // PrintTree(root);
+    // VerifyTree(root, min, max);
+    // PrintTree(root);
+    // VerifyTree(root, min, max);
     // Delete(&root,14);
     // PrintTree(root);
 
@@ -730,4 +770,62 @@ int main() {
 
     // Delete(&root,20);
     // PrintTree(root);
+
+    ifstream tsv("data.tsv");
+    int numRecords = 0;
+    string line;
+    getline(tsv, line); // consume the header line
+
+    set<uint32_t> keySet;
+        
+    while(getline(tsv, line)) {
+        if(line.empty()) continue; // ignore empty lines
+        size_t tabPos1 = line.find("\t");
+        size_t tabPos2 = line.substr(tabPos1+1).find("\t");
+        uint32_t insert = std::stoi(line.substr(tabPos1 + tabPos2 + 2));
+        keySet.insert(insert);
+        Insert(&root, insert);
+        // PrintTree(root); 
+        
+        // cin.get();
+    }
+    VerifyTree(root, 5, 2279223);
+    // Delete(&root, 1000);
+    
+    std::vector<uint32_t> output;
+    std::copy(keySet.begin(), keySet.end(), std::back_inserter(output));
+
+    auto rng = std::default_random_engine {};
+    std::shuffle(std::begin(output), std::end(output), rng);
+
+    for(uint32_t rit : output) {
+        if(rit==12002){
+        PrintTree(root);}
+        Delete(&root, rit);
+        if(rit==12002){
+        PrintTree(root);}
+        keySet.erase(rit);
+        VerifyTree(root, *keySet.begin(), *keySet.rbegin());
+    }
 }
+
+
+// 11514 11557 11610 11669 11702 11736 11770 11810 11834 11870 11915 11947
+//  12049 12075 12134 12167 12204 12256 12282 12319 12366 12424 12489 12554
+
+
+
+// 11947 11951 11954 11956 11962 11966 11969 11972 11973 11976 11977 11978 11983 11984 11989 11991 11995 11999 12001
+//  12002 12010 12018 12019 12022 12024 12029 12031 12033 12039 12042 12046
+//  12049 12050 12053 12054 12055 12056 12058 12059 12064 12069 12070 12072
+
+// 11947 11951 11954 11956 11962 11966 11969 11972 11973 11976 11977 11978 11983 11984 11989 11991 11995 11999 12001
+//  12010 12018 12019 12022 12024 12029 12031 12033 12039 12042 12046 12049 12050 12053 12054 12055 12056 12058 12059 12064 12069 12070 12072
+
+
+
+// 14795 14868 14951 15012 15096 15135 15199 15299 15339 15400 15456 15517 15594
+//  15747 15796 15844 15913 15984 16036 16078 16153 16223 16279 16345 16396 16451
+
+//  14795 14868 14951 15012 15096 15135 15199 15299 15339 15400 15456 15517 15594
+//  15747 15796 15844 15913 15984 16036 16078 16153 16223 16279 16345 16396 16451
