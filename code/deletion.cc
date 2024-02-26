@@ -33,8 +33,10 @@ typedef struct DuplicatesBlock {
 uint32_t numLeaf = 1;
 uint32_t numInternal;
 uint32_t numDuplicates;
+set<uint32_t> keySet;
 
 void Insert(IndexBlock** root, uint32_t key) {
+    if(keySet.count(key) == 0) keySet.insert(key);
     IndexBlock* block = *root;
     stack<IndexBlock*> stack;
     while (block->nodeType != LEAF) {
@@ -324,7 +326,6 @@ void Delete(IndexBlock** root, uint32_t key) {
         stack.push(block);
         block = block->pointers[i];
     }
-    
 
     bool keyFound = false;
     int keyIndex;
@@ -362,6 +363,7 @@ void Delete(IndexBlock** root, uint32_t key) {
     // cout << "Reached d " << key << endl;
 
     if (block->numKeys < ceil(N / 2.0f)) {
+    // cout << "Leaf underflow" << endl;
     IndexBlock* parent = nullptr;
     IndexBlock* leftSibling = nullptr;
     IndexBlock* rightSibling = nullptr;
@@ -383,19 +385,19 @@ void Delete(IndexBlock** root, uint32_t key) {
         
         if (indexOfBlockInParent > 0) {
             leftSibling = parent->pointers[indexOfBlockInParent - 1];
-            cout << "Left Sibling: " << leftSibling->keys[0] << endl;
+            // cout << "Left Sibling: " << leftSibling->keys[0] << endl;
 
         }
         if (indexOfBlockInParent < parent->numKeys) {
             rightSibling = parent->pointers[indexOfBlockInParent + 1];
-            cout << "Right Sibling: " << rightSibling->keys[0] << endl;
+            // cout << "Right Sibling: " << rightSibling->keys[0] << endl;
         }
 
         if (leftSibling != nullptr && leftSibling->numKeys > ceil(N / 2.0f)) {
-        cout << "here" << endl;
+            // cout << "Leaf borrowing from left" << endl;
         for(int i = block->numKeys; i > 0; i--) {
             block->keys[i] = block->keys[i - 1];
-            block->pointers[i+1] = block->pointers[i];
+            block->pointers[i] = block->pointers[i-1];
         }
         // cout << "c 1: "  << endl;
         block->pointers[1] = block->pointers[0];
@@ -413,6 +415,7 @@ void Delete(IndexBlock** root, uint32_t key) {
         
         } 
         else if (rightSibling != nullptr && rightSibling->numKeys > ceil(N / 2.0f)) {
+            // cout << "Leaf borrowing from right" << endl;
         block->keys[block->numKeys] = parent->keys[indexOfBlockInParent];
 
         block->pointers[block->numKeys] = rightSibling->pointers[0];
@@ -433,6 +436,7 @@ void Delete(IndexBlock** root, uint32_t key) {
     }
 
     else {
+        // cout << "Leaf merging" << endl;
     IndexBlock* sibling = (leftSibling != nullptr) ? leftSibling : rightSibling;
     int siblingIndex = (leftSibling != nullptr) ? indexOfBlockInParent - 1 : indexOfBlockInParent;
     
@@ -475,6 +479,7 @@ void Delete(IndexBlock** root, uint32_t key) {
     stack.pop();
 
     if (parentNode->numKeys < floor(N / 2.0f)) {
+        // cout << "Parent underflow" << endl;
         // cout << "Underflow: " << parentNode->keys[0] << endl;
         IndexBlock* grandParent = !stack.empty() ? stack.top() : nullptr;
         IndexBlock* leftParentSibling = nullptr;
@@ -496,8 +501,8 @@ void Delete(IndexBlock** root, uint32_t key) {
             }
         }
 
-        if (leftParentSibling != nullptr && leftParentSibling->numKeys > ceil(N / 2.0f)) {
-        cout << "LEFTpARENT: " << parentNode->keys[0] << endl;
+        if (leftParentSibling != nullptr && leftParentSibling->numKeys > floor(N / 2.0f)) {
+        // cout << "Left parent borrowing: " << parentNode->keys[0] << endl;
         parentNode->pointers[parentNode->numKeys + 1] = parentNode->pointers[parentNode->numKeys]; // Shift the pointer
         for (int i = parentNode->numKeys; i > 0; i--) {
             parentNode->keys[i] = parentNode->keys[i - 1];
@@ -509,8 +514,8 @@ void Delete(IndexBlock** root, uint32_t key) {
         parentNode->numKeys++;
         leftParentSibling->numKeys--;
         } 
-        else if (rightParentSibling != nullptr && rightParentSibling->numKeys > ceil(N / 2.0f)) {
-        cout << "RIGHT Parent: " << rightParentSibling->keys[0] << endl;
+        else if (rightParentSibling != nullptr && rightParentSibling->numKeys > floor(N / 2.0f)) {
+        // cout << "Right parent borrowing: " << rightParentSibling->keys[0] << endl;
         parentNode->keys[parentNode->numKeys] = grandParent->keys[indexOfParentInGrandparent];
         parentNode->pointers[parentNode->numKeys + 1] = rightParentSibling->pointers[0];
         grandParent->keys[indexOfParentInGrandparent] = rightParentSibling->keys[0];
@@ -524,11 +529,15 @@ void Delete(IndexBlock** root, uint32_t key) {
         }
 
         else{
-        cout << "Merging " << endl;
+        // cout << "Parent Merging " << endl;
 
-        if (leftParentSibling != nullptr && leftParentSibling->numKeys <= ceil(N / 2.0f)) {
-            cout << "Merging L " << endl;
-            leftParentSibling->keys[leftParentSibling->numKeys] = grandParent->keys[indexOfParentInGrandparent - 1];
+        if (leftParentSibling != nullptr && leftParentSibling->numKeys <= floor(N / 2.0f)) {
+            // cout << "Merging L " << endl;
+            IndexBlock* successor = parentNode->pointers[0];
+            while(successor->nodeType != LEAF) {
+                successor = successor->pointers[0];
+            }
+            leftParentSibling->keys[leftParentSibling->numKeys] = successor->keys[0];
             for (int i = 0; i < parentNode->numKeys; ++i) {
                 leftParentSibling->keys[leftParentSibling->numKeys + 1 + i] = parentNode->keys[i];
                 leftParentSibling->pointers[leftParentSibling->numKeys + 1 + i] = parentNode->pointers[i];
@@ -536,22 +545,20 @@ void Delete(IndexBlock** root, uint32_t key) {
             leftParentSibling->pointers[leftParentSibling->numKeys + 1 + parentNode->numKeys] = parentNode->pointers[parentNode->numKeys];
             leftParentSibling->numKeys += (1 + parentNode->numKeys);
 
-            for (int i = indexOfParentInGrandparent; i < grandParent->numKeys - 1; ++i) {
+            for (int i = indexOfParentInGrandparent; i < grandParent->numKeys; ++i) {
                 grandParent->keys[i - 1] = grandParent->keys[i];
                 grandParent->pointers[i] = grandParent->pointers[i + 1];
             }
+            
             grandParent->numKeys--;
             numInternal--;
         } 
 
-
-
-        else if (rightParentSibling != nullptr && rightParentSibling->numKeys <= ceil(N / 2.0f)) {
-          
+        else if (rightParentSibling != nullptr && rightParentSibling->numKeys <= floor(N / 2.0f)) {
+            // cout << "Merging R" << endl;
             parentNode->keys[parentNode->numKeys] = grandParent->keys[indexOfParentInGrandparent];
 
             for (int i = 0; i < rightParentSibling->numKeys; ++i) {
-                cout << "Merging R" << rightParentSibling->keys[i] << endl;
                 parentNode->keys[parentNode->numKeys + 1 + i] = rightParentSibling->keys[i];
                 parentNode->pointers[parentNode->numKeys + 1 + i] = rightParentSibling->pointers[i];
             }
@@ -587,7 +594,7 @@ void Delete(IndexBlock** root, uint32_t key) {
         // Find the in-order successor of the key
         uint32_t inOrderSuccessor = findInOrderSuccessor(parentNode,key);
 
-        cout << "Changing "<< key << "with" << inOrderSuccessor << endl;
+        // cout << "Changing "<< key << "with" << inOrderSuccessor << endl;
         // Replace the key in the internal node with the in-order successor
         replaceKeyInInternalNode(parentNode, key, inOrderSuccessor);
     }
@@ -631,7 +638,7 @@ void Delete(IndexBlock** root, uint32_t key) {
     
     while (!stack.empty()) {
         IndexBlock* currentNode = stack.top();
-        cout << "Change" << endl;
+        // cout << "Change" << endl;
         stack.pop();
 
         // Check if the current node is an internal node and contains the key
@@ -645,7 +652,7 @@ void Delete(IndexBlock** root, uint32_t key) {
     }
 
 
-    cout << "Deleted: " << key << endl;
+    // cout << "Deleted: " << key << endl;
 }
 
 #define ASSERT(cond, msg, args...) assert((cond) || !fprintf(stderr, (msg "\n"), args))
@@ -657,11 +664,12 @@ typedef struct vData {
 } vData;
 
 void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
-    cout << "Verifying Tree… ";
+    // cout << "Verifying Tree… ";
     uint32_t nLeaf = 0;
     uint32_t nInternal = 0;
     uint32_t nDuplicates = 0;
-    set<uint32_t> keySet;
+    set<uint32_t> internalKeySet;
+    set<uint32_t> leafKeySet;
 
     queue<vData> q;
     q.push((vData){root, globalMin, globalMax});
@@ -679,8 +687,8 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
             ASSERT(skip || block->numKeys >= floor(N/2.0f), "[INTERNAL] Expected atleast floor(n/2) keys. Found %d", block->numKeys);
             uint32_t min = data.n1;
             for(int i = 0; i < block->numKeys; i++) {
-                ASSERT(keySet.count(block->keys[i]) == 0, "[INTERNAL] Found duplicate key %d within internal nodes", block->keys[i]);
-                keySet.insert(block->keys[i]);
+                ASSERT(internalKeySet.count(block->keys[i]) == 0, "[INTERNAL] Found duplicate key %d within internal nodes", block->keys[i]);
+                internalKeySet.insert(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[INTERNAL] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
                 q.push((vData){block->pointers[i],min,block->keys[i]-1});
                 min = block->keys[i];
@@ -697,7 +705,9 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
             ASSERT(skip || block->pointers[N] == q.front().p || (numDuplicates > 0 && q.front().p->nodeType == DUPLICATES) || (numDuplicates == 0 && q.size() == 0), "[LEAF] next (%lx) != q.next (%lx)", (uintptr_t)block->pointers[N], (uintptr_t)q.front().p);
             skip = false;
             for(int i = 0; i < block->numKeys; i++) {
-                if(keySet.count(block->keys[i])) keySet.erase(block->keys[i]);
+                ASSERT(leafKeySet.count(block->keys[i]) == 0, "[LEAD] Found duplicate key %d within leaf nodes", block->keys[i]);
+                leafKeySet.insert(block->keys[i]);
+                if(internalKeySet.count(block->keys[i])) internalKeySet.erase(block->keys[i]);
                 if(i >= 1) ASSERT(block->keys[i] > block->keys[i-1], "[LEAF] Node not sorted (%d is after %d)", block->keys[i], block->keys[i-1]);
                 if(block->pointers[i] != nullptr) {
                     q.push((vData){block->pointers[i],block->keys[i],0});
@@ -720,112 +730,61 @@ void VerifyTree(IndexBlock* root, uint32_t globalMin, uint32_t globalMax) {
         }
     }
     ASSERT(nLeaf == numLeaf, "Expected %d leaf nodes, traveresed %d", numLeaf, nLeaf);
-    if(keySet.size() != 0) {
-        cout << "EXTRA: " << *keySet.begin() << endl;
-    }
-    ASSERT(keySet.size() == 0, "Found %lu internal keys that do not appear in leaves", keySet.size());
+    ASSERT(internalKeySet.size() == 0, "Found %lu internal keys that do not appear in leaves", internalKeySet.size());
+    ASSERT(keySet == leafKeySet, "Mismatch of %d keys between expected keys and leaf keys", abs((int)(keySet.size() - leafKeySet.size())));
     ASSERT(nDuplicates == numDuplicates, "Expected %d duplicate nodes, traveresed %d", numDuplicates, nDuplicates);
-    cout << "Passed!" << endl;
+    // cout << "Passed!" << endl;
 }
 
 int main() {
-    IndexBlock* root = (IndexBlock*)malloc(sizeof(IndexBlock));
-    root->pointers = (IndexBlock**)malloc(sizeof(IndexBlock*)*(N+1));
-    root->nodeType = LEAF;
-    root->numKeys = 0;
-
-    // uint32_t inserts[] = {1, 4, 7, 10, 16, 19, 20, 21, 25, 31};
-    //  uint32_t max = inserts[0];
-    // uint32_t min = inserts[0];
-    // for(int i = 0; i < sizeof(inserts)/sizeof(uint32_t); i++){
-    //     Insert(&root, inserts[i]);
-    //     cout << "Inserted " << inserts[i] << endl;
-    //     if(inserts[i] > max) max = inserts[i];
-    //     if(inserts[i] < min) min = inserts[i];
-    //     // PrintTree(root);
-    // }
-    // VerifyTree(root, min, max);
-    
-    // // Delete(&root,10);
-    // PrintTree(root);
-    // Delete(&root,7);
-    // PrintTree(root);
-    // VerifyTree(root, min, max);
-    // PrintTree(root);
-    // VerifyTree(root, min, max);
-    // Delete(&root,14);
-    // PrintTree(root);
-
-    // Delete(&root,31);
-    // PrintTree(root);
-
-    // Delete(&root,45);
-    // PrintTree(root);
-
-    // Delete(&root,7);
-    // PrintTree(root);
-
-    // Delete(&root,1);
-    // PrintTree(root);
-
-    // Delete(&root,20);
-    // PrintTree(root);
-
-    ifstream tsv("data.tsv");
-    int numRecords = 0;
-    string line;
-    getline(tsv, line); // consume the header line
-
-    set<uint32_t> keySet;
-        
-    while(getline(tsv, line)) {
-        if(line.empty()) continue; // ignore empty lines
-        size_t tabPos1 = line.find("\t");
-        size_t tabPos2 = line.substr(tabPos1+1).find("\t");
-        uint32_t insert = std::stoi(line.substr(tabPos1 + tabPos2 + 2));
-        keySet.insert(insert);
-        Insert(&root, insert);
-        // PrintTree(root); 
-        
-        // cin.get();
-    }
-    VerifyTree(root, 5, 2279223);
-    // Delete(&root, 1000);
-    
-    std::vector<uint32_t> output;
-    std::copy(keySet.begin(), keySet.end(), std::back_inserter(output));
-
     auto rng = std::default_random_engine {};
-    std::shuffle(std::begin(output), std::end(output), rng);
 
-    for(uint32_t rit : output) {
-        if(rit==12002){
-        PrintTree(root);}
-        Delete(&root, rit);
-        if(rit==12002){
-        PrintTree(root);}
-        keySet.erase(rit);
-        VerifyTree(root, *keySet.begin(), *keySet.rbegin());
+    for(int i = 11; i < 100; i++) {
+        numInternal = 0;
+        numLeaf = 1;
+        numDuplicates = 0;
+        cout << "Seed " << i << endl;
+        rng.seed(i);
+
+        IndexBlock* root = (IndexBlock*)malloc(sizeof(IndexBlock));
+        root->pointers = (IndexBlock**)malloc(sizeof(IndexBlock*)*(N+1));
+        root->nodeType = LEAF;
+        root->numKeys = 0;
+
+        ifstream tsv("data.tsv");
+        int numRecords = 0;
+        string line;
+        getline(tsv, line); // consume the header line
+            
+        while(getline(tsv, line)) {
+            if(line.empty()) continue; // ignore empty lines
+            size_t tabPos1 = line.find("\t");
+            size_t tabPos2 = line.substr(tabPos1+1).find("\t");
+            uint32_t insert = std::stoi(line.substr(tabPos1 + tabPos2 + 2));
+            Insert(&root, insert);
+        }
+        cout << "Tree Built" << endl;
+        VerifyTree(root, 5, 2279223);
+        
+        std::vector<uint32_t> output;
+        std::copy(keySet.begin(), keySet.end(), std::back_inserter(output));
+
+        std::shuffle(std::begin(output), std::end(output), rng);
+        cout << "Random deletion from " << output[0] << " to " << output[output.size()-1] << endl;
+
+        int k = 0;
+        for(uint32_t rit : output) {
+            k++;
+            Delete(&root, rit);
+            keySet.erase(rit);
+            if(keySet.size() > 0 && k % 50 == 0) {
+                VerifyTree(root, *keySet.begin(), *keySet.rbegin());
+            }
+            // if(keySet.size() > 0) {
+            //     VerifyTree(root, *keySet.begin(), *keySet.rbegin());
+            // } else {
+            //     VerifyTree(root, 0, 0);
+            // }
+        }
     }
 }
-
-
-// 11514 11557 11610 11669 11702 11736 11770 11810 11834 11870 11915 11947
-//  12049 12075 12134 12167 12204 12256 12282 12319 12366 12424 12489 12554
-
-
-
-// 11947 11951 11954 11956 11962 11966 11969 11972 11973 11976 11977 11978 11983 11984 11989 11991 11995 11999 12001
-//  12002 12010 12018 12019 12022 12024 12029 12031 12033 12039 12042 12046
-//  12049 12050 12053 12054 12055 12056 12058 12059 12064 12069 12070 12072
-
-// 11947 11951 11954 11956 11962 11966 11969 11972 11973 11976 11977 11978 11983 11984 11989 11991 11995 11999 12001
-//  12010 12018 12019 12022 12024 12029 12031 12033 12039 12042 12046 12049 12050 12053 12054 12055 12056 12058 12059 12064 12069 12070 12072
-
-
-
-// 14795 14868 14951 15012 15096 15135 15199 15299 15339 15400 15456 15517 15594
-//  15747 15796 15844 15913 15984 16036 16078 16153 16223 16279 16345 16396 16451
-
-//  14795 14868 14951 15012 15096 15135 15199 15299 15339 15400 15456 15517 15594
-//  15747 15796 15844 15913 15984 16036 16078 16153 16223 16279 16345 16396 16451
