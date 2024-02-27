@@ -4,13 +4,13 @@
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
-#include <stdlib.h>
-#include <cmath>
+#include <stdio.h>
+#include <math.h>
 
 #define N 24
-#define SEARCH_TRIALS 100
-#define START_BLOCK 1
-#define DISK_SIZE 200 * 1024 * 1024
+#define TRIALS 100
+#define FIRST_DATA_BLOCK 1
+#define DISK_SIZE 100 * 1024 * 1024
 #define RECORD_SIZE sizeof(Record)
 #define BLOCK_SIZE sizeof(DataBlock)
 #define NUM_BLOCKS DISK_SIZE/BLOCK_SIZE

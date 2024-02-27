@@ -5,9 +5,13 @@ Disk::Disk() {
     this->disk = (uint8_t*)calloc(DISK_SIZE, sizeof(uint8_t));
 }
 
+Disk::Disk(uint8_t* from) {
+    this->disk = from;
+}
+
 uint8_t* Disk::ReadBlock(uint32_t blockNumber) {
-    assert(blockNumber >= START_BLOCK && blockNumber <= NUM_BLOCKS);
-    blockNumber -= START_BLOCK;
+    assert(blockNumber >= FIRST_DATA_BLOCK && blockNumber <= NUM_BLOCKS);
+    blockNumber -= FIRST_DATA_BLOCK;
 
     // pretend to seek and rotate
     uint8_t* blockPointer = (uint8_t*)((uintptr_t)this->disk + (blockNumber * BLOCK_SIZE));
@@ -20,12 +24,16 @@ uint8_t* Disk::ReadBlock(uint32_t blockNumber) {
 }
 
 void Disk::WriteBlock(uint32_t blockNumber, uint8_t* block) {
-    assert(blockNumber >= START_BLOCK && blockNumber <= NUM_BLOCKS);
-    blockNumber -= START_BLOCK;
+    assert(blockNumber >= FIRST_DATA_BLOCK && blockNumber <= NUM_BLOCKS);
+    blockNumber -= FIRST_DATA_BLOCK;
 
     // pretend to seek and rotate
     uint8_t* blockPointer = (uint8_t*)((uintptr_t)this->disk + (blockNumber * BLOCK_SIZE));
 
     // pretend to transfer
     memcpy(blockPointer, block, BLOCK_SIZE);
+}
+
+void Disk::Copy(uint8_t* to) {
+    memcpy(to, this->disk, DISK_SIZE);
 }
