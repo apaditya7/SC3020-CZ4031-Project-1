@@ -18,9 +18,9 @@
 
 #define ASSERT(cond, msg, args...) assert((cond) || !fprintf(stderr, (msg "\n"), args))
 
-#define LEAF 0xF
-#define INTERNAL 0xA
-#define DUPLICATES 0xD
+#define TYPE_LEAF 0xF
+#define TYPE_INTERNAL 0xA
+#define TYPE_OVERFLOW 0xD
 
 typedef struct Record {
     bool occupied;
@@ -47,13 +47,13 @@ typedef struct IndexBlock {
     RecordPointer pointers[N+1];
 } IndexBlock;
 
-typedef struct DuplicatesBlock {
+typedef struct OverflowBlock {
     uint8_t nodeType;
     uint8_t numKeys;
     uint16_t _; // for alignment
     RecordPointer pointers[N*2];
     RecordPointer next;
-} DuplicatesBlock;
+} OverflowBlock;
 
 typedef struct TraversalData {
     RecordPointer pointer;
@@ -75,7 +75,7 @@ typedef struct SearchResult {
 typedef struct IndexedSearchResult {
     uint32_t nInternal;
     uint32_t nLeaf;
-    uint32_t nDuplicates;
+    uint32_t nOverflow;
     long long unsigned int nData;
     uint32_t recordsFound;
     float averageRating;

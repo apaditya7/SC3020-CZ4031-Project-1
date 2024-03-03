@@ -75,7 +75,7 @@ void Experiment1(Disk* disk, string filename) {
 uint32_t numLevels = 1;
 uint32_t numLeaf = 1;
 uint32_t numInternal;
-uint32_t numDuplicates;
+uint32_t numOverflow;
 set<uint32_t> keySet;
 RecordPointer* rootPointer;
 
@@ -85,7 +85,7 @@ void Insert(Disk* disk, int key, RecordPointer pointer) {
     stack<IndexBlock*> blockStack;
     stack<RecordPointer> pointerStack;
     pointerStack.push(*rootPointer);
-    while (block->nodeType != LEAF) {
+    while (block->nodeType != TYPE_LEAF) {
         int i;
         for(i = 0; i < block->numKeys; i++) {
             if (key < block->keys[i]) break;
@@ -105,12 +105,12 @@ void Insert(Disk* disk, int key, RecordPointer pointer) {
     }
 
     if(keyExists) {
-        DuplicatesBlock* db = (DuplicatesBlock*)disk->ReadBlock(block->pointers[index].blockNumber);
-        if(db->nodeType == DUPLICATES) {
-            if(db->numKeys == 2*N) {
-                numDuplicates++;
-                DuplicatesBlock* newDb = (DuplicatesBlock*)calloc(BLOCK_SIZE, sizeof(uint8_t));
-                newDb->nodeType = DUPLICATES;
+        OverflowBlock* ob = (OverflowBlock*)disk->ReadBlock(block->pointers[index].blockNumber);
+        if(ob->nodeType == TYPE_OVERFLOW) {
+            if(ob->numKeys == 2*N) {
+                numOverflow++;
+                OverflowBlock* newDb = (OverflowBlock*)calloc(BLOCK_SIZE, sizeof(uint8_t));
+                newDb->nodeType = TYPE_OVERFLOW;
                 newDb->numKeys = 1;
                 newDb->pointers[0] = pointer;
                 newDb->next = (RecordPointer){block->pointers[index].blockNumber, 0};
@@ -120,13 +120,13 @@ void Insert(Disk* disk, int key, RecordPointer pointer) {
                 disk->WriteBlock(currentFreeBlock++, (uint8_t*)newDb);
                 free(newDb);
             } else {
-                db->pointers[db->numKeys++] = pointer;
-                disk->WriteBlock(block->pointers[index].blockNumber, (uint8_t*)db);
+                ob->pointers[ob->numKeys++] = pointer;
+                disk->WriteBlock(block->pointers[index].blockNumber, (uint8_t*)ob);
             }
         } else {
-            numDuplicates++;
-            DuplicatesBlock* newDb = (DuplicatesBlock*)calloc(BLOCK_SIZE, sizeof(uint8_t));
-            newDb->nodeType = DUPLICATES;
+            numOverflow++;
+            OverflowBlock* newDb = (OverflowBlock*)calloc(BLOCK_SIZE, sizeof(uint8_t));
+            newDb->nodeType = TYPE_OVERFLOW;
             newDb->numKeys = 2;
             newDb->pointers[0] = block->pointers[index];
             newDb->pointers[1] = pointer;
@@ -137,7 +137,7 @@ void Insert(Disk* disk, int key, RecordPointer pointer) {
             disk->WriteBlock(currentFreeBlock++, (uint8_t*)newDb);
             free(newDb);
         }
-        free(db);
+        free(ob);
         free(block);
     } else if(block->numKeys < N) {
         int i;
@@ -154,7 +154,7 @@ void Insert(Disk* disk, int key, RecordPointer pointer) {
         free(block);
     } else {
         IndexBlock* newBlock = (IndexBlock*)calloc(BLOCK_SIZE, sizeof(uint8_t));
-        newBlock->nodeType = LEAF;
+        newBlock->nodeType = TYPE_LEAF;
         numLeaf++;
 
         uint32_t newKeys[N+1];
@@ -243,7 +243,7 @@ void Insert(Disk* disk, int key, RecordPointer pointer) {
                 }
 
                 IndexBlock* newBlock = (IndexBlock*)calloc(BLOCK_SIZE, sizeof(uint8_t));
-                newBlock->nodeType = INTERNAL;
+                newBlock->nodeType = TYPE_INTERNAL;
                 numInternal++;
 
                 int k = ceil(N/2.0f);
@@ -276,7 +276,7 @@ void Insert(Disk* disk, int key, RecordPointer pointer) {
             numLevels++;
             numInternal++;
             IndexBlock* newRoot = (IndexBlock*)calloc(BLOCK_SIZE, sizeof(uint8_t));
-            newRoot->nodeType = INTERNAL;
+            newRoot->nodeType = TYPE_INTERNAL;
             newRoot->pointers[0] = left;
             newRoot->pointers[1] = right;
             newRoot->keys[0] = keyToAdd;
@@ -299,7 +299,7 @@ void Experiment2(Disk* disk) {
     rootPointer->blockNumber = currentFreeBlock++;
 
     IndexBlock* root = (IndexBlock*)disk->ReadBlock(rootPointer->blockNumber);
-    root->nodeType = LEAF;
+    root->nodeType = TYPE_LEAF;
     root->numKeys = 0;
     disk->WriteBlock(rootPointer->blockNumber,(uint8_t*) root);
     free(root);
@@ -317,7 +317,7 @@ void Experiment2(Disk* disk) {
     cout << "Statistics:" << endl;
     cout << "a) N = " << N << endl;
     cout << "b) The tree has " << numLevels << " levels" << endl;
-    cout << "c) " << numInternal << " Internal Nodes, " << numLeaf << " Leaf Nodes, " << numDuplicates << " Duplicate Nodes. Total is " << numInternal + numLeaf + numDuplicates << endl;
+    cout << "c) " << numInternal << " Internal Nodes, " << numLeaf << " Leaf Nodes, " << numOverflow << " Overflow Nodes. Total is " << numInternal + numLeaf + numOverflow << endl;
 
     IndexBlock* rootBlock = (IndexBlock*)disk->ReadBlock(rootPointer->blockNumber);
     cout << "d) Root has " << (uint32_t)rootBlock->numKeys << " keys:";
@@ -333,7 +333,7 @@ void VerifyTree(Disk* disk) {
     cout << endl << "Verifying Tree… ";
     uint32_t nLeaf = 0;
     uint32_t nInternal = 0;
-    uint32_t nDuplicates = 0;
+    uint32_t nOverflow = 0;
     set<uint32_t> dataBlocks;
     set<uint32_t> pointers;
     set<uint32_t> internalKeySet;
@@ -349,7 +349,7 @@ void VerifyTree(Disk* disk) {
 
         IndexBlock* block = (IndexBlock*)disk->ReadBlock(data.p.blockNumber);
         bool dontFree = false;
-        if(block->nodeType == INTERNAL){
+        if(block->nodeType == TYPE_INTERNAL){
             nInternal++;
             ASSERT(block->keys[0] >= data.n1, "[INTERNAL] Minimum is %d, found %d", data.n1, block->keys[0]);
             ASSERT(block->keys[block->numKeys - 1] <= data.n2, "[INTERNAL] Maximum is %d, found %d", data.n2, block->keys[block->numKeys - 1]);
@@ -366,14 +366,14 @@ void VerifyTree(Disk* disk) {
             q.push((vData){block->pointers[block->numKeys],min,data.n2});
 
 
-        } else if(block->nodeType == LEAF) {
+        } else if(block->nodeType == TYPE_LEAF) {
             ASSERT(nInternal == numInternal, "Expected %d internal nodes, traveresed %d", numInternal, nInternal);
             nLeaf++;
             ASSERT((skip && block->numKeys == 0) || block->keys[0] >= data.n1, "[LEAF] Minimum is %d, found %d", data.n1, block->keys[0]);
             ASSERT((skip && block->numKeys == 0) || block->keys[block->numKeys - 1] <= data.n2, "[LEAF] Maximum is %d, found %d", data.n2, block->keys[block->numKeys - 1]);
             ASSERT(skip || block->numKeys >= floor((N+1)/2.0f), "[LEAF] Expected atleast floor((n+1)/2). Found %d", block->numKeys);
             IndexBlock* nextBlock = (IndexBlock*)disk->ReadBlock(q.front().p.blockNumber);
-            ASSERT(skip || block->pointers[N].blockNumber == q.front().p.blockNumber || nextBlock->nodeType == DUPLICATES || nextBlock->nodeType == 0 || nextBlock->nodeType == 1, "[LEAF] next (%d) != q.next (%d)", block->pointers[N].blockNumber, q.front().p.blockNumber);
+            ASSERT(skip || block->pointers[N].blockNumber == q.front().p.blockNumber || nextBlock->nodeType == TYPE_OVERFLOW || nextBlock->nodeType == 0 || nextBlock->nodeType == 1, "[LEAF] next (%d) != q.next (%d)", block->pointers[N].blockNumber, q.front().p.blockNumber);
             free(nextBlock);
             skip = false;
             for(int i = 0; i < block->numKeys; i++) {
@@ -384,20 +384,20 @@ void VerifyTree(Disk* disk) {
                 q.push((vData){block->pointers[i],block->keys[i],0});
             }
 
-        } else if(block->nodeType == DUPLICATES) {
-            DuplicatesBlock* dB = (DuplicatesBlock*)block;
-            nDuplicates++;
-            ASSERT(dB->numKeys > 0 && (dB->numKeys > 1 || dB->next.blockNumber != 0), "Duplicate Block has %d keys!", dB->numKeys);
+        } else if(block->nodeType == TYPE_OVERFLOW) {
+            OverflowBlock* dB = (OverflowBlock*)block;
+            nOverflow++;
+            ASSERT(dB->numKeys > 0 && (dB->numKeys > 1 || dB->next.blockNumber != 0), "Overflow Block has %d keys!", dB->numKeys);
             for(int i = 0; i < dB->numKeys; i++) {
                 q.push((vData){dB->pointers[i],data.n1,data.n2});
             }
             if(dB->next.blockNumber != 0) {
                 while(dB->next.blockNumber != 0) {
-                    nDuplicates++;
+                    nOverflow++;
                     uint32_t nextBlock = dB->next.blockNumber;
                     free(dB);
-                    dB = (DuplicatesBlock*)disk->ReadBlock(nextBlock);
-                    ASSERT(dB->numKeys == N*2, "Inner Duplicate Block has %d keys", dB->numKeys);
+                    dB = (OverflowBlock*)disk->ReadBlock(nextBlock);
+                    ASSERT(dB->numKeys == N*2, "Inner Overflow Block has %d keys", dB->numKeys);
                     for(int i = 0; i < dB->numKeys; i++) {
                         q.push((vData){dB->pointers[i],data.n1,data.n2});
                     }
@@ -421,7 +421,7 @@ void VerifyTree(Disk* disk) {
     ASSERT(nLeaf == numLeaf, "Expected %d leaf nodes, traveresed %d", numLeaf, nLeaf);
     ASSERT(keySet == leafKeySet, "Mismatch of %d keys between expected keys and leaf keys", abs((int)(keySet.size() - leafKeySet.size())));
     ASSERT(internalKeySet.size() == 0, "Found %lu internal keys that do not appear in leaves", internalKeySet.size());
-    ASSERT(nDuplicates == numDuplicates, "Expected %d duplicate nodes, traveresed %d", numDuplicates, nDuplicates);
+    ASSERT(nOverflow == numOverflow, "Expected %d overflow nodes, traveresed %d", numOverflow, nOverflow);
     ASSERT(dataBlocks.size() == numDataBlocks, "Expected %u data blocks, traveresed %lu", numDataBlocks, dataBlocks.size());
     ASSERT(pointers.size() == numRecords, "Expected %u records, traveresed %lu", numRecords, pointers.size());
 
@@ -431,7 +431,7 @@ void VerifyTree(Disk* disk) {
 IndexedSearchResult IndexedSearch(Disk* disk, int min, int max) {
     uint32_t nInternal = 0;
     uint32_t nLeaf = 0;
-    uint32_t nDuplicates = 0;
+    uint32_t nOverflow = 0;
 
     std::set<int> visitedData;
     uint32_t totalRecords = 0;
@@ -439,7 +439,7 @@ IndexedSearchResult IndexedSearch(Disk* disk, int min, int max) {
 
     IndexBlock *block = (IndexBlock *)disk->ReadBlock(rootPointer->blockNumber);
 
-    while (block->nodeType != LEAF) // search the key until leaf node
+    while (block->nodeType != TYPE_LEAF) // search the key until leaf node
     {
         int i;
         for (i = 0; i < block->numKeys; i++)
@@ -465,34 +465,34 @@ IndexedSearchResult IndexedSearch(Disk* disk, int min, int max) {
     }
 
     while(block->keys[keyIndex] <= max) {
-        DuplicatesBlock *db = (DuplicatesBlock *)disk->ReadBlock(block->pointers[keyIndex].blockNumber);
-        if(db->nodeType == DUPLICATES) {
-            while (true) // to iterate through duplicatesblocksss
+        OverflowBlock *ob = (OverflowBlock *)disk->ReadBlock(block->pointers[keyIndex].blockNumber);
+        if(ob->nodeType == TYPE_OVERFLOW) {
+            while (true) // to iterate through overflow blocks
             {
-                nDuplicates++;
-                for (int j = 0; j < db->numKeys; j++) // to iterate the keys in a duplicatesblock
+                nOverflow++;
+                for (int j = 0; j < ob->numKeys; j++) // to iterate the keys in an overflow block
                 {
-                    visitedData.insert(db->pointers[j].blockNumber);
-                    DataBlock *temp = (DataBlock *)disk->ReadBlock(db->pointers[j].blockNumber);
-                    totalRating += temp->records[db->pointers[j].recordIndex].averageRating;
+                    visitedData.insert(ob->pointers[j].blockNumber);
+                    DataBlock *temp = (DataBlock *)disk->ReadBlock(ob->pointers[j].blockNumber);
+                    totalRating += temp->records[ob->pointers[j].recordIndex].averageRating;
                     totalRecords++;
                     free(temp);
                 }
-                if (db->next.blockNumber == 0)
+                if (ob->next.blockNumber == 0)
                 {
                     break;
                 }
-                uint32_t nextBlock = db->next.blockNumber;
-                free(db);
-                db = (DuplicatesBlock *)disk->ReadBlock(nextBlock); // go to the next duplicatesblock
+                uint32_t nextBlock = ob->next.blockNumber;
+                free(ob);
+                ob = (OverflowBlock *)disk->ReadBlock(nextBlock); // go to the next overflow block
             }
         } else {
-            DataBlock* temp = (DataBlock*)db;
+            DataBlock* temp = (DataBlock*)ob;
             visitedData.insert(block->pointers[keyIndex].blockNumber);
             totalRating += temp->records[block->pointers[keyIndex].recordIndex].averageRating;
             totalRecords++;
         }
-        free(db);
+        free(ob);
 
         keyIndex++;
 
@@ -508,7 +508,7 @@ IndexedSearchResult IndexedSearch(Disk* disk, int min, int max) {
 
     free(block);
 
-    return (IndexedSearchResult) { nInternal, nLeaf, nDuplicates, visitedData.size(), totalRecords, totalRating/(float)totalRecords };
+    return (IndexedSearchResult) { nInternal, nLeaf, nOverflow, visitedData.size(), totalRecords, totalRating/(float)totalRecords };
 }
 
 SearchResult LinearSearch(Disk* disk, int min, int max) {
@@ -559,7 +559,7 @@ void PrintSearchResult(SearchResult sr, long long timeTaken) {
 
 void PrintSearchResult(IndexedSearchResult isr, long long timeTaken) {
     cout << "> Indexed Search Statistics" << endl;
-    cout << "a) Index Blocks Accessed: " << isr.nInternal << " Internal, " << isr.nLeaf << " Leaf, " << isr.nDuplicates << " Duplicates. Total is " << isr.nInternal + isr.nLeaf + isr.nDuplicates << endl;
+    cout << "a) Index Blocks Accessed: " << isr.nInternal << " Internal, " << isr.nLeaf << " Leaf, " << isr.nOverflow << " Overflow. Total is " << isr.nInternal + isr.nLeaf + isr.nOverflow << endl;
     cout << "b) Data Blocks Accessed: " << isr.nData << endl;
     cout << "c) Found " << isr.recordsFound << " records" << endl;
     cout << "d) Average Rating: " << isr.averageRating << endl;
@@ -638,7 +638,7 @@ uint32_t findInOrderSuccessor(Disk* disk, IndexBlock* node, uint32_t key) {
     int keyIndex = 0;
     while (keyIndex < node->numKeys && node->keys[keyIndex] <= key) keyIndex++;
     IndexBlock* current = (IndexBlock*)disk->ReadBlock(node->pointers[keyIndex].blockNumber);
-    while (current->nodeType != LEAF) {
+    while (current->nodeType != TYPE_LEAF) {
         RecordPointer nextBlock = current->pointers[0];
         free(current);
         current = (IndexBlock*)disk->ReadBlock(nextBlock.blockNumber);
@@ -669,7 +669,7 @@ void Delete(Disk* disk, uint32_t key) {
     stack<IndexBlock*> blockStack;
     stack<RecordPointer> pointerStack;
     pointerStack.push(*rootPointer);
-    while (block->nodeType != LEAF) {
+    while (block->nodeType != TYPE_LEAF) {
         int i;
         for(i = 0; i < block->numKeys; i++) {
             if (key < block->keys[i]) break;
@@ -695,34 +695,34 @@ void Delete(Disk* disk, uint32_t key) {
 
     keySet.erase(key);
 
-    DuplicatesBlock* db = (DuplicatesBlock*) disk->ReadBlock(block->pointers[keyIndex].blockNumber);
-    if(db->nodeType == DUPLICATES) {
+    OverflowBlock* ob = (OverflowBlock*) disk->ReadBlock(block->pointers[keyIndex].blockNumber);
+    if(ob->nodeType == TYPE_OVERFLOW) {
         do {
-            for(int i = 0; i < db->numKeys; i++) {
-                DataBlock* b = (DataBlock*) disk->ReadBlock(db->pointers[i].blockNumber);
-                b->records[db->pointers[i].recordIndex].occupied = false;
-                disk->WriteBlock(db->pointers[i].blockNumber, (uint8_t*)b);
+            for(int i = 0; i < ob->numKeys; i++) {
+                DataBlock* b = (DataBlock*) disk->ReadBlock(ob->pointers[i].blockNumber);
+                b->records[ob->pointers[i].recordIndex].occupied = false;
+                disk->WriteBlock(ob->pointers[i].blockNumber, (uint8_t*)b);
                 if(isEmpty(b)) numDataBlocks--;
                 free(b);
                 numRecords--;
             }
 
-            DuplicatesBlock* next = nullptr;
-            if(db->next.blockNumber != 0) {
-                next = (DuplicatesBlock*)disk->ReadBlock(db->next.blockNumber);
+            OverflowBlock* next = nullptr;
+            if(ob->next.blockNumber != 0) {
+                next = (OverflowBlock*)disk->ReadBlock(ob->next.blockNumber);
             }
             
-            free(db);
-            numDuplicates--;
-            db = next;
-        } while(db != nullptr);
+            free(ob);
+            numOverflow--;
+            ob = next;
+        } while(ob != nullptr);
     } else {
-        DataBlock* b = (DataBlock*) db;
-        b->records[block->pointers[keyIndex].recordIndex].occupied = false;
-        disk->WriteBlock(block->pointers[keyIndex].blockNumber, (uint8_t*)b);
+        DataBlock* db = (DataBlock*) ob;
+        db->records[block->pointers[keyIndex].recordIndex].occupied = false;
+        disk->WriteBlock(block->pointers[keyIndex].blockNumber, (uint8_t*)db);
         numRecords--;
-        if(isEmpty(b)) numDataBlocks--;
-        free(b);
+        if(isEmpty(db)) numDataBlocks--;
+        free(db);
     }
 
     for(int i = keyIndex; i < block->numKeys - 1; i++) {
@@ -884,7 +884,7 @@ void Delete(Disk* disk, uint32_t key) {
                         if (leftParentSibling != nullptr && leftParentSibling->numKeys <= floor(N / 2.0f)) {
                             RecordPointer leftPointer = grandParent->pointers[indexOfParentInGrandparent - 1];
                             IndexBlock* successor = (IndexBlock*)disk->ReadBlock(parentNode->pointers[0].blockNumber);
-                            while(successor->nodeType != LEAF)  {
+                            while(successor->nodeType != TYPE_LEAF)  {
                                 RecordPointer nextBlock = successor->pointers[0];
                                 free(successor);
                                 successor = (IndexBlock*)disk->ReadBlock(nextBlock.blockNumber);
@@ -941,7 +941,7 @@ void Delete(Disk* disk, uint32_t key) {
 
                 int parentUpdate = keyIndexInNode(parentNode, key);
                 // Check if the current node is an internal node and contains the key
-                if (parentNode->nodeType != LEAF && parentUpdate != -1) {
+                if (parentNode->nodeType != TYPE_LEAF && parentUpdate != -1) {
                     
                     // Find the in-order successor of the key
                     uint32_t inOrderSuccessor = findInOrderSuccessor(disk, parentNode, key);
@@ -959,19 +959,19 @@ void Delete(Disk* disk, uint32_t key) {
     free(block);
 
     IndexBlock* root = (IndexBlock*)disk->ReadBlock(rootPointer->blockNumber);
-    if (root->numKeys == 0 && root->nodeType != LEAF) {
+    if (root->numKeys == 0 && root->nodeType != TYPE_LEAF) {
         rootPointer->blockNumber = root->pointers[0].blockNumber;
         numInternal--;
         numLevels--;
     }
 
     int rootUpdate = keyIndexInNode(root, key);
-    if (root->nodeType != LEAF && rootUpdate != -1) {
+    if (root->nodeType != TYPE_LEAF && rootUpdate != -1) {
         // Navigate to the right subtree of the deleted key
         IndexBlock* current = (IndexBlock*)disk->ReadBlock(root->pointers[rootUpdate + 1].blockNumber);
 
         // Find the in-order successor (leftmost key in the right subtree)
-        while (current->nodeType != LEAF) {
+        while (current->nodeType != TYPE_LEAF) {
             RecordPointer nextBlock = current->pointers[0];
             free(current);
             current = (IndexBlock*)disk->ReadBlock(nextBlock.blockNumber);
@@ -992,7 +992,7 @@ void Delete(Disk* disk, uint32_t key) {
 
         // Check if the current node is an internal node and contains the key
         int keyUpdate = keyIndexInNode(currentNode, key);
-        if (currentNode->nodeType != LEAF && keyUpdate != -1) {
+        if (currentNode->nodeType != TYPE_LEAF && keyUpdate != -1) {
             // Find the in-order successor of the key
             uint32_t inOrderSuccessor = findInOrderSuccessor(disk, currentNode, key);
 
@@ -1037,7 +1037,7 @@ void Experiment5(Disk* disk) {
 
     // Save Stats
     uint32_t nInternal = numInternal;
-    uint32_t nDuplicates = numDuplicates;
+    uint32_t nOverflow = numOverflow;
     RecordPointer rPointer = *rootPointer;
     uint32_t nDataBlocks = numDataBlocks;
     uint32_t nLeaf = numLeaf;
@@ -1053,7 +1053,7 @@ void Experiment5(Disk* disk) {
         // Restore Stats
         numInternal = nInternal;
         numDataBlocks = nDataBlocks;
-        numDuplicates = nDuplicates;
+        numOverflow = nOverflow;
         numLeaf = nLeaf;
         numRecords = nRecords;
         *rootPointer = rPointer;
@@ -1077,7 +1077,7 @@ void Experiment5(Disk* disk) {
     indexedAvg = chrono::duration_cast<chrono::microseconds>(end - start).count();
     cout << "> B+ Tree Deletion Statistics" << endl;
     cout << "a) The tree has " << numLevels << " levels" << endl;
-    cout << "b) " << numInternal << " Internal Nodes, " << numLeaf << " Leaf Nodes, " << numDuplicates << " Duplicate Nodes. Total is " << numInternal + numLeaf + numDuplicates << endl;
+    cout << "b) " << numInternal << " Internal Nodes, " << numLeaf << " Leaf Nodes, " << numOverflow << " Overflow Nodes. Total is " << numInternal + numLeaf + numOverflow << endl;
 
     IndexBlock* rootBlock = (IndexBlock*)disk->ReadBlock(rootPointer->blockNumber);
     cout << "c) Root has " << (uint32_t)rootBlock->numKeys << " keys:";
