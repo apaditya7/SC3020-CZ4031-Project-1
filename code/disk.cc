@@ -37,3 +37,7 @@ void Disk::WriteBlock(uint32_t blockNumber, uint8_t* block) {
 void Disk::Copy(uint8_t* to) {
     memcpy(to, this->disk, DISK_SIZE);
 }
+
+Disk::~Disk() {
+    free(this->disk);
+}

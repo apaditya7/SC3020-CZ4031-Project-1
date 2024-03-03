@@ -1068,7 +1068,7 @@ void Experiment5(Disk* disk) {
         end = chrono::steady_clock::now();
         timings.push_back(chrono::duration_cast<chrono::microseconds>(end - start).count());
     }
-    free(diskCopy);
+    delete disk2;
     linearAvg = Median(timings);
 
     start = chrono::steady_clock::now();
@@ -1102,5 +1102,7 @@ int main() {
     Experiment3(disk);
     Experiment4(disk);
     Experiment5(disk);
+    delete disk;
+    delete rootPointer;
 }
 
