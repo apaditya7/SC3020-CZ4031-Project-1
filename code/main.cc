@@ -4,6 +4,7 @@
 #include <fstream>
 #include <chrono>
 #include <algorithm>
+#include <vector>
 
 #include "constants.h"
 #include "disk.h"
