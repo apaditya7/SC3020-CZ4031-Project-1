@@ -17,7 +17,7 @@ class BPTree {
         std::set<uint32_t> keySet;
         RecordPointer* rootPointer;
 
-        BPTree(uint32_t _numRecords, uint32_t _numDataBlocks, uint32_t _currentFreeBlock) : numRecords(_numRecords), numDataBlocks(_numDataBlocks), currentFreeBlock(_currentFreeBlock), rootPointer(new RecordPointer()), numLevels(1), numLeaf(1) {};
+        BPTree(uint32_t _numRecords, uint32_t _numDataBlocks, uint32_t _currentFreeBlock) : numRecords(_numRecords), numDataBlocks(_numDataBlocks), currentFreeBlock(_currentFreeBlock), rootPointer(new RecordPointer()), numLevels(1), numLeaf(1), numInternal(0), numOverflow(0) {};
         ~BPTree();
 
         void Insert(Disk* disk, int key, RecordPointer pointer);
