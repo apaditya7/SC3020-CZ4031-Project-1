@@ -10,7 +10,7 @@ Disk::Disk(uint8_t* from) {
 }
 
 uint8_t* Disk::ReadBlock(uint32_t blockNumber) {
-    assert(blockNumber >= FIRST_DATA_BLOCK && blockNumber <= NUM_BLOCKS);
+    ASSERT(blockNumber >= FIRST_DATA_BLOCK && blockNumber <= NUM_BLOCKS, "Block %d is out of range [%d, %lu]", blockNumber, FIRST_DATA_BLOCK, NUM_BLOCKS);
     blockNumber -= FIRST_DATA_BLOCK;
 
     // pretend to seek and rotate
@@ -24,7 +24,7 @@ uint8_t* Disk::ReadBlock(uint32_t blockNumber) {
 }
 
 void Disk::WriteBlock(uint32_t blockNumber, uint8_t* block) {
-    assert(blockNumber >= FIRST_DATA_BLOCK && blockNumber <= NUM_BLOCKS);
+    ASSERT(blockNumber >= FIRST_DATA_BLOCK && blockNumber <= NUM_BLOCKS, "Block %d is out of range [%d, %lu]", blockNumber, FIRST_DATA_BLOCK, NUM_BLOCKS);
     blockNumber -= FIRST_DATA_BLOCK;
 
     // pretend to seek and rotate
