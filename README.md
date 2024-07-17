@@ -1,5 +1,6 @@
 # SC3020-CZ4031-Project-1
 Group 11 Project 1 DBMS Storage and Indexing
+> Listed amongst the top groups for this project.
 
 ## Installation
 The code needs to compiled and run from the `code` directory. The `data.tsv` file must be present in the current working directory where the executable is run from (included in the `code` folder). We recommend using gcc to compile and run the code.  
