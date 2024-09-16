@@ -22,31 +22,40 @@ void Experiment1(string filename) {
     uint32_t numDataBlocks = 0;
     uint32_t currentFreeBlock = FIRST_DATA_BLOCK;
 
-    ifstream tsv(filename);
-    assert(tsv.good());
+    ifstream txt(filename);
+    assert(txt.good());
     
     string line;
-    getline(tsv, line); // consume the header line
+    getline(txt, line); // consume the header line
     
     DataBlock* block = (DataBlock*)disk->ReadBlock(currentFreeBlock);
     uint32_t index = 0;
-    
-    while(getline(tsv, line)) {
+
+    while(getline(txt, line)) {
         if(line.empty()) continue; // ignore empty lines
         numRecords++;
 
-        size_t tabPos1 = line.find("\t");
-        size_t tabPos2 = line.substr(tabPos1+1).find("\t");
+        stringstream ss(line);
+        NBARecord record;
+        getline(ss, record.game_date_est, '\t');
+        ss >> record.team_id_home;
+        ss.ignore(1);  // skip the tab character
+        ss >> record.pts_home;
+        ss.ignore(1);
+        ss >> record.fg_pct_home;
+        ss.ignore(1);
+        ss >> record.ft_pct_home;
+        ss.ignore(1);
+        ss >> record.fg3_pct_home;
+        ss.ignore(1);
+        ss >> record.ast_home;
+        ss.ignore(1);
+        ss >> record.reb_home;
+        ss.ignore(1);
+        ss >> record.home_team_wins;
 
-        size_t idSize = sizeof(block->records[index].tconst);
-        memcpy(block->records[index].tconst, line.c_str(), idSize);
-
-        // replace tab with 0 in case its copied as the last character for ids of length 9
-        if (tabPos1 == idSize - 1) block->records[index].tconst[idSize - 1] = 0; 
-
-        block->records[index].occupied = true;
-        block->records[index].averageRating = std::stof(line.substr(tabPos1 + 1, tabPos2));
-        block->records[index].numVotes = std::stoi(line.substr(tabPos1 + tabPos2 + 2));
+        block->records[index] = record;
+        block->occupied[index] = true;
 
         ++index;
         if(index == RECORDS_PER_BLOCK) {
@@ -69,12 +78,13 @@ void Experiment1(string filename) {
 
     cout << "Statistics:" << endl;
     cout << "a) " << numRecords << " Records" << endl;
-    cout << "b) Each record has a size of " << RECORD_SIZE <<  "B" << endl;
+    cout << "b) Each record has a size of " << sizeof(NBARecord) << "B" << endl;
     cout << "c) " << RECORDS_PER_BLOCK << " Records per Block" << endl;
     cout << "d) " << numDataBlocks << " Blocks used" << endl;
 
     bptree = new BPTree(numRecords, numDataBlocks, currentFreeBlock);
 }
+
 
 void Experiment2() {
     cout << endl << "Running Experiment 2" << endl;
@@ -89,7 +99,7 @@ void Experiment2() {
     for(uint32_t i = FIRST_DATA_BLOCK; i < LAST_DATA_BLOCK + FIRST_DATA_BLOCK; i++){
         DataBlock* dataBlock = (DataBlock*)disk->ReadBlock(i);
         for(uint32_t k = 0; k < RECORDS_PER_BLOCK; k++){
-            if(dataBlock->records[k].occupied) {
+            if(dataBlock->occupied[k]) {
                 bptree->Insert(disk, dataBlock->records[k].numVotes, (RecordPointer){i, k});
             }
         }
@@ -122,7 +132,7 @@ SearchResult LinearSearch(Disk* searchDisk, int min, int max) {
             DataBlock* block = (DataBlock*)searchDisk->ReadBlock(i);
             nBlocks++;
             for(int k = 0; k < RECORDS_PER_BLOCK; k++){
-                if(block->records[k].occupied) {
+                if(block->occupied[k]) {
                     if(block->records[k].numVotes == min) {
                         totalRating += block->records[k].averageRating;
                         totalRecords++;
@@ -136,7 +146,7 @@ SearchResult LinearSearch(Disk* searchDisk, int min, int max) {
             DataBlock* block = (DataBlock*)searchDisk->ReadBlock(i);
             nBlocks++;
             for(int k = 0; k < RECORDS_PER_BLOCK; k++){
-                if(block->records[k].occupied) {
+                if(block->occupied[k]) {
                     if(block->records[k].numVotes >= min && block->records[k].numVotes <= max) {
                         totalRating += block->records[k].averageRating;
                         totalRecords++;
@@ -242,8 +252,8 @@ uint32_t LinearDelete(Disk* deletionDisk, uint32_t key) {
         DataBlock* block = (DataBlock*)deletionDisk->ReadBlock(i);
         bool modified = false;
         for(int k = 0; k < RECORDS_PER_BLOCK; k++){
-            if(block->records[k].occupied && block->records[k].numVotes == key){
-                block->records[k].occupied = false;
+            if(block->occupied[k] && block->records[k].team_id_home == key){
+                block->occupied[k] = false;
                 modified = true;
             }
         }

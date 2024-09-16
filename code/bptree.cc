@@ -255,46 +255,47 @@ IndexedSearchResult BPTree::Search(Disk* disk, int min, int max) {
     }
 
     while(block->keys[keyIndex] <= max) {
-        OverflowBlock *ob = (OverflowBlock *)disk->ReadBlock(block->pointers[keyIndex].blockNumber);
-        if(ob->nodeType == TYPE_OVERFLOW) {
-            while (true) // to iterate through overflow blocks
+    OverflowBlock *ob = (OverflowBlock *)disk->ReadBlock(block->pointers[keyIndex].blockNumber);
+    if(ob->nodeType == TYPE_OVERFLOW) {
+        while (true) // to iterate through overflow blocks
+        {
+            nOverflow++;
+            for (int j = 0; j < ob->numKeys; j++) // to iterate the keys in an overflow block
             {
-                nOverflow++;
-                for (int j = 0; j < ob->numKeys; j++) // to iterate the keys in an overflow block
-                {
-                    visitedData.insert(ob->pointers[j].blockNumber);
-                    DataBlock *temp = (DataBlock *)disk->ReadBlock(ob->pointers[j].blockNumber);
-                    totalRating += temp->records[ob->pointers[j].recordIndex].averageRating;
-                    totalRecords++;
-                    free(temp);
-                }
-                if (ob->next.blockNumber == 0)
-                {
-                    break;
-                }
-                uint32_t nextBlock = ob->next.blockNumber;
-                free(ob);
-                ob = (OverflowBlock *)disk->ReadBlock(nextBlock); // go to the next overflow block
+                visitedData.insert(ob->pointers[j].blockNumber);
+                DataBlock *temp = (DataBlock *)disk->ReadBlock(ob->pointers[j].blockNumber);
+                totalRating += temp->records[ob->pointers[j].recordIndex].fg_pct_home;  // Use fg_pct_home
+                totalRecords++;
+                free(temp);
             }
-        } else {
-            DataBlock* temp = (DataBlock*)ob;
-            visitedData.insert(block->pointers[keyIndex].blockNumber);
-            totalRating += temp->records[block->pointers[keyIndex].recordIndex].averageRating;
-            totalRecords++;
+            if (ob->next.blockNumber == 0)
+            {
+                break;
+            }
+            uint32_t nextBlock = ob->next.blockNumber;
+            free(ob);
+            ob = (OverflowBlock *)disk->ReadBlock(nextBlock); // go to the next overflow block
         }
-        free(ob);
-
-        keyIndex++;
-
-        if(keyIndex == block->numKeys) {
-            uint32_t nextBlock = block->pointers[N].blockNumber;
-            if(block->keys[keyIndex] == max || nextBlock == 0) break;
-            free(block);
-            block = (IndexBlock*)disk->ReadBlock(nextBlock);
-            nLeaf++;
-            keyIndex = 0;
-        }
+    } else {
+        DataBlock* temp = (DataBlock*)ob;
+        visitedData.insert(block->pointers[keyIndex].blockNumber);
+        totalRating += temp->records[block->pointers[keyIndex].recordIndex].fg_pct_home;  // Use fg_pct_home
+        totalRecords++;
     }
+    free(ob);
+
+    keyIndex++;
+
+    if(keyIndex == block->numKeys) {
+        uint32_t nextBlock = block->pointers[N].blockNumber;
+        if(block->keys[keyIndex] == max || nextBlock == 0) break;
+        free(block);
+        block = (IndexBlock*)disk->ReadBlock(nextBlock);
+        nLeaf++;
+        keyIndex = 0;
+    }
+}
+
 
     free(block);
 
@@ -318,7 +319,7 @@ uint32_t findInOrderSuccessor(Disk* disk, IndexBlock* node, uint32_t key) {
 
 bool isEmpty(DataBlock* block) {
     for(int i = 0; i < RECORDS_PER_BLOCK; i++) {
-        if(block->records[i].occupied) return false;
+        if(block->occupied[i]) return false;
     }
     return true;
 }
@@ -352,7 +353,7 @@ void BPTree::Delete(Disk* disk, uint32_t key) {
         do {
             for(int i = 0; i < ob->numKeys; i++) {
                 DataBlock* b = (DataBlock*) disk->ReadBlock(ob->pointers[i].blockNumber);
-                b->records[ob->pointers[i].recordIndex].occupied = false;
+                b->occupied[ob->pointers[i].recordIndex] = false;
                 disk->WriteBlock(ob->pointers[i].blockNumber, (uint8_t*)b);
                 if(isEmpty(b)) numDataBlocks--;
                 free(b);
@@ -370,7 +371,7 @@ void BPTree::Delete(Disk* disk, uint32_t key) {
         } while(ob != nullptr);
     } else {
         DataBlock* db = (DataBlock*) ob;
-        db->records[block->pointers[keyIndex].recordIndex].occupied = false;
+        db->occupied[block->pointers[keyIndex].recordIndex] = false;
         disk->WriteBlock(block->pointers[keyIndex].blockNumber, (uint8_t*)db);
         numRecords--;
         if(isEmpty(db)) numDataBlocks--;
@@ -738,7 +739,9 @@ void BPTree::VerifyTree(Disk* disk) {
             uint32_t i = data.p.recordIndex;
             ASSERT(i >= 0 && i < RECORDS_PER_BLOCK, "Record Index %d is out of range!", i);
             DataBlock* dataBlock = (DataBlock*)block;
-            ASSERT(dataBlock->records[i].numVotes == data.n1, "Record Mismatch! Expected %d but found %d", data.n1, dataBlock->records[i].numVotes);
+            ASSERT(dataBlock->records[i].fg_pct_home == data.n1, 
+       "Record Mismatch! Expected %.2f but found %.2f", 
+       data.n1, dataBlock->records[i].fg_pct_home);
         } else {
             ASSERT(0 == 1, "Invalid Block Type %d", block->nodeType);
         }

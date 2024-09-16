@@ -11,7 +11,8 @@
 #define TRIALS 100
 #define FIRST_DATA_BLOCK 1
 #define DISK_SIZE 100 * 1024 * 1024
-#define RECORD_SIZE sizeof(Record)
+
+#define RECORD_SIZE sizeof(NBARecord) 
 #define BLOCK_SIZE sizeof(DataBlock)
 #define NUM_BLOCKS DISK_SIZE/BLOCK_SIZE
 #define RECORDS_PER_BLOCK BLOCK_SIZE/RECORD_SIZE
@@ -22,17 +23,25 @@
 #define TYPE_INTERNAL 0xA
 #define TYPE_OVERFLOW 0xD
 
-typedef struct Record {
-    bool occupied;
-    uint8_t _; // for alignment
-    char tconst[10];
-    float averageRating;
-    uint32_t numVotes;
-} Record;
+struct NBARecord {
+    std::string game_date_est;
+    int team_id_home;
+    int pts_home;
+    float fg_pct_home;
+    float ft_pct_home;
+    float fg3_pct_home;
+    int ast_home;
+    int reb_home;
+    int home_team_wins;
 
-typedef struct DataBlock {
-    Record records[10];
-} DataBlock;
+    NBARecord() : game_date_est(""), team_id_home(0), pts_home(0), fg_pct_home(0.0), ft_pct_home(0.0),
+                  fg3_pct_home(0.0), ast_home(0), reb_home(0), home_team_wins(0) {}
+};
+
+struct DataBlock {
+    NBARecord records[10];
+    bool occupied[10]; 
+};
 
 typedef struct RecordPointer {
     uint32_t blockNumber : 28;
