@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <math.h>
-
+#include <string>
 #define N 24
 #define TRIALS 100
 #define FIRST_DATA_BLOCK 1

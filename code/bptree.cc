@@ -217,8 +217,8 @@ void BPTree::Insert(Disk* disk, int key, RecordPointer pointer) {
         blockStack.pop();
     }
 }
-
-IndexedSearchResult BPTree::Search(Disk* disk, int min, int max) {
+/*
+IndexedSearchResult BPTree::Search(Disk* disk, float minFG, float maxFG) {
     uint32_t nInternal = 0;
     uint32_t nLeaf = 0;
     uint32_t nOverflow = 0;
@@ -234,7 +234,7 @@ IndexedSearchResult BPTree::Search(Disk* disk, int min, int max) {
         int i;
         for (i = 0; i < block->numKeys; i++)
         {
-            if (min < block->keys[i])
+            if (minFG < block->keys[i])
                 break;
         }
         uint32_t nextBlock = block->pointers[i].blockNumber;
@@ -248,13 +248,13 @@ IndexedSearchResult BPTree::Search(Disk* disk, int min, int max) {
     int keyIndex;
     for (keyIndex = 0; keyIndex < block->numKeys; keyIndex++)
     {
-        if (block->keys[keyIndex] >= min)
+        if (block->keys[keyIndex] >= minFG)
         {
             break;
         }
     }
 
-    while(block->keys[keyIndex] <= max) {
+    while(block->keys[keyIndex] <= maxFG) {
     OverflowBlock *ob = (OverflowBlock *)disk->ReadBlock(block->pointers[keyIndex].blockNumber);
     if(ob->nodeType == TYPE_OVERFLOW) {
         while (true) // to iterate through overflow blocks
@@ -288,7 +288,7 @@ IndexedSearchResult BPTree::Search(Disk* disk, int min, int max) {
 
     if(keyIndex == block->numKeys) {
         uint32_t nextBlock = block->pointers[N].blockNumber;
-        if(block->keys[keyIndex] == max || nextBlock == 0) break;
+        if(block->keys[keyIndex] == maxFG || nextBlock == 0) break;
         free(block);
         block = (IndexBlock*)disk->ReadBlock(nextBlock);
         nLeaf++;
@@ -301,6 +301,7 @@ IndexedSearchResult BPTree::Search(Disk* disk, int min, int max) {
 
     return (IndexedSearchResult) { nInternal, nLeaf, nOverflow, visitedData.size(), totalRecords, totalRating/(float)totalRecords };
 }
+*/
 
 uint32_t findInOrderSuccessor(Disk* disk, IndexBlock* node, uint32_t key) {
     int keyIndex = 0;

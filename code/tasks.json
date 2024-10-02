@@ -1,0 +1,33 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build and Run",
+            "type": "shell",
+            "command": "/usr/bin/clang++",
+            "args": [
+                "-std=c++17",
+                "-isysroot", "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+                "-g",
+                "${workspaceFolder}/code/test.cc",
+                "-o",
+                "${workspaceFolder}/test",
+                "&&",
+                "./test"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": ["$gcc"]
+        }
+    ]
+}

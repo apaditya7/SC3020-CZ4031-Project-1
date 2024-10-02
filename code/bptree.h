@@ -21,7 +21,7 @@ class BPTree {
         ~BPTree();
 
         void Insert(Disk* disk, int key, RecordPointer pointer);
-        IndexedSearchResult Search(Disk* disk, int min, int max);
+        IndexedSearchResult Search(Disk* disk, float minFG, float maxFG);
         void Delete(Disk* disk, uint32_t key);
         void VerifyTree(Disk* disk);
 };
